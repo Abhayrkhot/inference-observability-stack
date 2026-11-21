@@ -1,0 +1,19 @@
+{
+  "git_sha": "44bcab0",
+  "host": "llm-server",
+  "cpus": 20,
+  "loadavg_end": 2.37,
+  "finished_unix": 1795292012.0,
+  "python": "3.12.16",
+  "proxy": "http://127.0.0.1:28000",
+  "model": "qwen2.5-0.5b-instruct",
+  "rate": 7.4,
+  "duration_s": 300.0,
+  "prompt": "lognormal:256:0.6:16:1024",
+  "output": "lognormal:128:0.6:8:512",
+  "requests": 2131,
+  "errors": 0,
+  "matched": 2131,
+  "run_dir": "agreement-20261121-200803",
+  "window_s": 318.2
+}

@@ -292,6 +292,7 @@ class LoadConfig:
 class Result:
     id: int
     stage: int
+    target: int  # index into the comma-separated --url list (requests rotate through them)
     t_sched: float  # scheduled arrival, seconds since run start
     t_send: float
     status: int = 0
@@ -321,7 +322,9 @@ async def run_load(cfg: LoadConfig, on_result=None) -> tuple[list[Result], dict]
     pd, od = Dist.parse(cfg.prompt), Dist.parse(cfg.output)
     results: list[Result] = []
     path = "/v1/chat/completions" if cfg.endpoint == "chat" else "/v1/completions"
-    url = cfg.url.rstrip("/") + path
+    # Several comma-separated URLs are used round-robin per request, so targets can be compared under the
+    # same engine state (paired, interleaved A/B) instead of in separate runs.
+    urls = [u.rstrip("/") + path for u in cfg.url.split(",") if u]
     sem = asyncio.Semaphore(cfg.max_inflight)
     timeout = aiohttp.ClientTimeout(total=cfg.timeout_s)
     connector = aiohttp.TCPConnector(limit=0, force_close=False)
@@ -349,7 +352,8 @@ async def run_load(cfg: LoadConfig, on_result=None) -> tuple[list[Result], dict]
         async with sem:
             t_send = time.perf_counter() - t_run0
             r = Result(
-                id=next(ids),
+                id=(rid := next(ids)),
+                target=rid % len(urls),
                 stage=stage,
                 t_sched=t_sched,
                 t_send=t_send,
@@ -360,7 +364,7 @@ async def run_load(cfg: LoadConfig, on_result=None) -> tuple[list[Result], dict]
             meter = StreamMeter(t_start=t0_abs)
             try:
                 hdrs = {"Content-Type": "application/json", "X-Request-Id": f"lg-{r.id}", **cfg.headers}
-                async with session.post(url, data=body, headers=hdrs) as resp:
+                async with session.post(urls[r.target], data=body, headers=hdrs) as resp:
                     r.status = resp.status
                     r.ttfb_s = time.perf_counter() - t0_abs
                     if resp.status != 200:

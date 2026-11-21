@@ -1,0 +1,12 @@
+{
+  "git_sha": "44bcab0",
+  "host": "llm-server",
+  "cpus": 20,
+  "loadavg_end": 2.4,
+  "finished_unix": 1795291002.2,
+  "python": "3.12.16",
+  "proxy": "http://127.0.0.1:28000",
+  "tempo": "http://127.0.0.1:28200",
+  "model": "qwen2.5-0.5b-instruct",
+  "n": 3
+}

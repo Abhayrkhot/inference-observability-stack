@@ -87,12 +87,14 @@ def block_headline() -> str:
     sat = rows(GPU_TAG, "saturation")
     out = []
     p1 = next((r for r in ov if r["target"] == "proxy" and r["concurrency"] == "1"), None)
+    t1 = next((r for r in ov if r["target"] == "proxy+tracing" and r["concurrency"] == "1"), None)
     p32 = next((r for r in ov if r["target"] == "proxy+tracing" and r["concurrency"] == "32"), None)
-    if p1:
+    if p1 and t1:
         out.append(
-            f"- **Metering costs {f(p1['ttft_p50_delta_ms'], digits=2)} ms of TTFT at p50** "
-            f"(single stream) and {pct(float(p32['throughput_delta_pct']) / 100) if p32 else 'n/a'} "
-            f"throughput at 32 concurrent streams with every request traced."
+            f"- **Metering adds {f(p1['ttft_p50_delta_ms'], digits=2)} ms to TTFT at p50** for a single stream "
+            f"(95% CI {p1['ttft_p50_delta_ci_ms'].replace('..', ' to ')} ms), "
+            f"{f(t1['ttft_p50_delta_ms'], digits=2)} ms with every request traced; at 32 streams the traced "
+            f"proxy uses {f(p32['proxy_cpu_us_per_token'], digits=0) if p32 else 'n/a'} us of CPU per token."
         )
     k = ("ttft", "proxy histogram", "0.99")
     e = ("ttft", "proxy exact", "0.99")
@@ -151,19 +153,28 @@ def block_overhead() -> str:
     r = rows(GPU_TAG, "overhead")
     if not r:
         return missing("overhead")
+
+    def ci(x: dict, key: str) -> str:
+        v = x.get(key)
+        return "" if not v else f" ({v.replace('..', ' to ')})"
+
     body = []
     for x in r:
+        d = x["target"] == "direct"
         body.append(
             [
                 x["concurrency"],
                 x["target"],
+                x["requests"],
                 ms(x["ttft_p50_s"], 2),
                 ms(x["ttft_p99_s"], 2),
-                ms(x["tpot_p50_s"], 2),
-                f(x["output_tok_per_s"], digits=0),
-                "" if x["target"] == "direct" else f(x.get("ttft_p50_delta_ms"), digits=2, unit=" ms"),
-                "" if x["target"] == "direct" else pct(float(x["throughput_delta_pct"]) / 100),
-                "" if x["target"] == "direct" else f(x.get("proxy_cpu_util"), 100, 0, "%"),
+                ""
+                if d
+                else f(x.get("ttft_p50_delta_ms"), digits=2, unit=" ms") + ci(x, "ttft_p50_delta_ci_ms"),
+                "" if d else f(x.get("ttft_p99_delta_ms"), digits=2, unit=" ms"),
+                "" if d else f(x.get("tpot_p50_delta_us"), digits=0, unit=" us"),
+                "" if d else f(x.get("proxy_cpu_util"), 100, 1, "%"),
+                "" if d else f(x.get("proxy_cpu_us_per_token"), digits=0, unit=" us"),
             ]
         )
     m = meta(GPU_TAG, "overhead")
@@ -172,19 +183,23 @@ def block_overhead() -> str:
             [
                 "streams",
                 "target",
+                "requests",
                 "TTFT p50",
                 "TTFT p99",
-                "TPOT p50",
-                "output tok/s",
-                "TTFT p50 delta",
-                "throughput delta",
+                "TTFT p50 delta (95% CI)",
+                "TTFT p99 delta",
+                "TPOT p50 delta",
                 "proxy CPU",
+                "CPU per token",
             ],
             body,
         )
-        + f"\n\nMedians of {m.get('repeats', '?')} repeats of {f(m.get('duration_s'), digits=0)} s closed-loop "
-        "runs per cell, target order rotated each repeat. Proxy CPU is the proxy process's CPU time over "
-        "wall time (100% = one core). " + src(GPU_TAG, "overhead")
+        + f"\n\nEach row group is one {f(m.get('duration_s'), digits=0)} s closed-loop run whose requests rotate "
+        "through the three targets, so every target sees the same engine state; deltas are against `direct` "
+        "in the same run, with bootstrap 95% intervals. Separate runs per target were tried first and "
+        "discarded: this laptop GPU runs power-capped (SM clock 1.3 of 2.1 GHz under load) and its speed "
+        "drifts between runs by more than the proxy costs. Proxy CPU is that proxy process's CPU time over "
+        "wall time (100% = one core) while serving a third of the requests. " + src(GPU_TAG, "overhead")
     )
 
 
@@ -246,22 +261,20 @@ def block_buckets() -> str:
                     for lay in ("vLLM default", "OTel semconv", "inferobs fine")
                 ]
             )
-    nb = {x["layout"]: x["buckets"] for x in r if x["metric"] == "itl"}
+
+    def nb(layout: str) -> str:
+        counts = sorted({int(x["buckets"]) for x in r if x["layout"] == layout})
+        return f"{counts[0]}" if len(counts) == 1 else f"{counts[0]} to {counts[-1]}"
+
     return (
-        table(
-            [
-                "metric",
-                "q",
-                "exact",
-                f"vLLM default ({nb.get('vLLM default', '?')} buckets)",
-                f"OTel semconv ({nb.get('OTel semconv', '?')})",
-                f"inferobs fine ({nb.get('inferobs fine', '?')})",
-            ],
-            body,
-        )
+        table(["metric", "q", "exact", "vLLM default", "OTel semconv", "inferobs fine"], body)
         + "\n\nError of PromQL `histogram_quantile` against the exact quantile of the same observations "
         "(every request and chunk gap from the agreement run, re-bucketed per layout with a reimplementation "
-        "of PromQL's interpolation, `inferobs/analysis/stats.py`). " + src(GPU_TAG, "agreement_buckets")
+        f"of PromQL's interpolation in `inferobs/analysis/stats.py`). Bounds per histogram: vLLM default "
+        f"{nb('vLLM default')}, OTel semconv {nb('OTel semconv')}, inferobs fine {nb('inferobs fine')}. vLLM 0.34 "
+        "uses the OpenTelemetry advisory boundaries (plus a longer tail), so those two columns match except "
+        "end to end; its lowest inter-token bound is 10 ms, above this GPU's median decode step. vLLM 0.34 "
+        "accepts `--custom-histogram-buckets` to fix this. " + src(GPU_TAG, "agreement_buckets")
     )
 
 
@@ -291,7 +304,7 @@ def block_saturation() -> str:
                 "TTFT p50",
                 "TTFT p99",
                 "TPOT p99",
-                "goodput tok/s",
+                "output tok/s",
                 "running",
                 "waiting",
                 "KV peak",
@@ -352,28 +365,43 @@ def block_trace() -> str:
     if not p.exists():
         return missing("trace")
     t = json.loads(p.read_text())["traces"][0]
+    fields = (
+        ("inferobs.time_to_first_chunk_s", "TTFC"),
+        ("gen_ai.latency.time_in_queue", "queue"),
+        ("gen_ai.latency.time_in_model_prefill", "prefill"),
+        ("gen_ai.latency.time_to_first_token", "TTFT"),
+        ("gen_ai.latency.time_in_model_decode", "decode"),
+    )
     lines = []
     for s in sorted(t["spans"], key=lambda s: s["parent_span_id"] or ""):
         a = s["attributes"]
-        keys = [
-            k
-            for k in (
-                "gen_ai.latency.time_in_queue",
-                "gen_ai.latency.time_to_first_token",
-                "gen_ai.latency.time_in_model_prefill",
-                "gen_ai.latency.time_in_model_decode",
-                "inferobs.time_to_first_chunk_s",
-                "gen_ai.usage.output_tokens",
-            )
-            if k in a
-        ]
-        attrs = ", ".join(
-            f"{k}={float(a[k]):.4g}"
-            if isinstance(a[k], (int, float, str)) and str(a[k]).replace(".", "", 1).isdigit()
-            else f"{k}={a[k]}"
-            for k in keys
+        parts = [f"{label} {float(a[k]) * 1e3:.2f} ms" for k, label in fields if k in a]
+        toks = a.get("gen_ai.usage.output_tokens", a.get("gen_ai.usage.completion_tokens"))
+        if toks is not None:
+            parts.append(f"{int(float(toks))} output tokens")
+        lines.append(f"{s['service']:<15} {s['name']:<27} {s['duration_ms']:7.1f} ms   " + ", ".join(parts))
+    ttfc = next(
+        (
+            float(x["attributes"]["inferobs.time_to_first_chunk_s"])
+            for x in t["spans"]
+            if "inferobs.time_to_first_chunk_s" in x["attributes"]
+        ),
+        None,
+    )
+    ttft = next(
+        (
+            float(x["attributes"]["gen_ai.latency.time_to_first_token"])
+            for x in t["spans"]
+            if "gen_ai.latency.time_to_first_token" in x["attributes"]
+        ),
+        None,
+    )
+    gap_note = ""
+    if ttfc is not None and ttft is not None:
+        gap_note = (
+            f"The caller-side first chunk came {(ttfc - ttft) * 1e3:.1f} ms after vLLM's own first token: "
+            "the API server's HTTP/SSE path and the proxy hop, which no engine metric includes. "
         )
-        lines.append(f"{s['service']:<16} {s['name']:<28} {s['duration_ms']:8.1f} ms  {attrs}")
     return (
         "```text\n"
         + "\n".join(lines)
@@ -381,7 +409,8 @@ def block_trace() -> str:
         + (
             "One request, one trace: the proxy's client span and vLLM's server span share the trace ID the caller "
             "sent, and vLLM's span carries its own queue/prefill/decode split. "
-            f"Source: `results/{GPU_TAG}/trace_example.json`."
+            + gap_note
+            + f"Source: `results/{GPU_TAG}/trace_example.json`."
         )
     )
 

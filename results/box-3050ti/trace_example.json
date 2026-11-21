@@ -1,0 +1,200 @@
+{
+  "traces": [
+    {
+      "trace_id": "dd7327b6d7475306a4edc3532e845f06",
+      "services": [
+        "inferobs-proxy",
+        "vllm"
+      ],
+      "spans": [
+        {
+          "service": "inferobs-proxy",
+          "name": "chat qwen2.5-0.5b-instruct",
+          "kind": "SPAN_KIND_CLIENT",
+          "span_id": "PVosGrhsLac=",
+          "parent_span_id": "MuMv3PVw04c=",
+          "duration_ms": 245.976652,
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "vllm",
+            "gen_ai.request.model": "qwen2.5-0.5b-instruct",
+            "server.address": "http://engine:8000",
+            "gen_ai.request.max_tokens": "32",
+            "inferobs.request.stream": true,
+            "gen_ai.usage.output_tokens": "32",
+            "inferobs.content_chunks": "32",
+            "gen_ai.usage.input_tokens": "37",
+            "gen_ai.response.id": "chatcmpl-8c4738fa0e579faf",
+            "gen_ai.response.model": "qwen2.5-0.5b-instruct",
+            "gen_ai.response.finish_reasons": {
+              "values": [
+                {
+                  "stringValue": "length"
+                }
+              ]
+            },
+            "inferobs.time_to_first_chunk_s": 0.018407,
+            "inferobs.time_per_output_token_s": 0.007305,
+            "inferobs.max_chunk_gap_s": 0.008741,
+            "http.response.status_code": "200"
+          }
+        },
+        {
+          "service": "vllm",
+          "name": "llm_request",
+          "kind": "SPAN_KIND_SERVER",
+          "span_id": "3lqdNS+9sv8=",
+          "parent_span_id": "PVosGrhsLac=",
+          "duration_ms": 242.532698,
+          "attributes": {
+            "gen_ai.latency.time_to_first_token": 0.015852689743041992,
+            "gen_ai.latency.e2e": 0.24200701713562012,
+            "gen_ai.latency.time_in_queue": 2.1047017071396112e-05,
+            "gen_ai.usage.prompt_tokens": "37",
+            "gen_ai.usage.completion_tokens": "32",
+            "gen_ai.latency.time_in_model_prefill": 0.012662845983868465,
+            "gen_ai.latency.time_in_model_decode": 0.22631016999366693,
+            "gen_ai.latency.time_in_model_inference": 0.2389730159775354,
+            "gen_ai.request.id": "chatcmpl-8c4738fa0e579faf",
+            "gen_ai.request.top_p": 1,
+            "gen_ai.request.max_tokens": "32",
+            "gen_ai.request.temperature": 1,
+            "gen_ai.request.n": "1"
+          }
+        }
+      ],
+      "engine_span_is_child": true
+    },
+    {
+      "trace_id": "4ced9cc9f80d4da5d302844b7257e42d",
+      "services": [
+        "inferobs-proxy",
+        "vllm"
+      ],
+      "spans": [
+        {
+          "service": "inferobs-proxy",
+          "name": "chat qwen2.5-0.5b-instruct",
+          "kind": "SPAN_KIND_CLIENT",
+          "span_id": "SBKfxcjAx4g=",
+          "parent_span_id": "CjvZMtNzBzo=",
+          "duration_ms": 234.888956,
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "vllm",
+            "gen_ai.request.model": "qwen2.5-0.5b-instruct",
+            "server.address": "http://engine:8000",
+            "gen_ai.request.max_tokens": "32",
+            "inferobs.request.stream": true,
+            "gen_ai.usage.output_tokens": "32",
+            "inferobs.content_chunks": "30",
+            "gen_ai.usage.input_tokens": "37",
+            "gen_ai.response.id": "chatcmpl-b91cc6d9cd9b8f67",
+            "gen_ai.response.model": "qwen2.5-0.5b-instruct",
+            "gen_ai.response.finish_reasons": {
+              "values": [
+                {
+                  "stringValue": "length"
+                }
+              ]
+            },
+            "inferobs.time_to_first_chunk_s": 0.017418,
+            "inferobs.time_per_output_token_s": 0.006991,
+            "inferobs.max_chunk_gap_s": 0.020775,
+            "http.response.status_code": "200"
+          }
+        },
+        {
+          "service": "vllm",
+          "name": "llm_request",
+          "kind": "SPAN_KIND_SERVER",
+          "span_id": "CWVJhtkImAw=",
+          "parent_span_id": "SBKfxcjAx4g=",
+          "duration_ms": 231.720086,
+          "attributes": {
+            "gen_ai.latency.time_to_first_token": 0.015158891677856445,
+            "gen_ai.latency.e2e": 0.23117351531982422,
+            "gen_ai.latency.time_in_queue": 2.1226005628705025e-05,
+            "gen_ai.usage.prompt_tokens": "37",
+            "gen_ai.usage.completion_tokens": "32",
+            "gen_ai.latency.time_in_model_prefill": 0.011346671002684161,
+            "gen_ai.latency.time_in_model_decode": 0.21609815600095317,
+            "gen_ai.latency.time_in_model_inference": 0.22744482700363733,
+            "gen_ai.request.id": "chatcmpl-b91cc6d9cd9b8f67",
+            "gen_ai.request.top_p": 1,
+            "gen_ai.request.max_tokens": "32",
+            "gen_ai.request.temperature": 1,
+            "gen_ai.request.n": "1"
+          }
+        }
+      ],
+      "engine_span_is_child": true
+    },
+    {
+      "trace_id": "a3884b273426578def3ef2a383edb3e4",
+      "services": [
+        "inferobs-proxy",
+        "vllm"
+      ],
+      "spans": [
+        {
+          "service": "inferobs-proxy",
+          "name": "chat qwen2.5-0.5b-instruct",
+          "kind": "SPAN_KIND_CLIENT",
+          "span_id": "sU8GLoVOkhc=",
+          "parent_span_id": "4RfGt/AEzKw=",
+          "duration_ms": 232.51645,
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "vllm",
+            "gen_ai.request.model": "qwen2.5-0.5b-instruct",
+            "server.address": "http://engine:8000",
+            "gen_ai.request.max_tokens": "32",
+            "inferobs.request.stream": true,
+            "gen_ai.usage.output_tokens": "32",
+            "inferobs.content_chunks": "32",
+            "gen_ai.usage.input_tokens": "37",
+            "gen_ai.response.id": "chatcmpl-8c563754f6cea3d4",
+            "gen_ai.response.model": "qwen2.5-0.5b-instruct",
+            "gen_ai.response.finish_reasons": {
+              "values": [
+                {
+                  "stringValue": "length"
+                }
+              ]
+            },
+            "inferobs.time_to_first_chunk_s": 0.015846,
+            "inferobs.time_per_output_token_s": 0.006979,
+            "inferobs.max_chunk_gap_s": 0.007604,
+            "http.response.status_code": "200"
+          }
+        },
+        {
+          "service": "vllm",
+          "name": "llm_request",
+          "kind": "SPAN_KIND_SERVER",
+          "span_id": "BX4ipRt/UrY=",
+          "parent_span_id": "sU8GLoVOkhc=",
+          "duration_ms": 230.225555,
+          "attributes": {
+            "gen_ai.latency.time_to_first_token": 0.01395559310913086,
+            "gen_ai.latency.e2e": 0.22961807250976562,
+            "gen_ai.latency.time_in_queue": 2.223800402134657e-05,
+            "gen_ai.usage.prompt_tokens": "37",
+            "gen_ai.usage.completion_tokens": "32",
+            "gen_ai.latency.time_in_model_prefill": 0.010878567991312593,
+            "gen_ai.latency.time_in_model_decode": 0.21547489499789663,
+            "gen_ai.latency.time_in_model_inference": 0.22635346298920922,
+            "gen_ai.request.id": "chatcmpl-8c563754f6cea3d4",
+            "gen_ai.request.top_p": 1,
+            "gen_ai.request.max_tokens": "32",
+            "gen_ai.request.temperature": 1,
+            "gen_ai.request.n": "1"
+          }
+        }
+      ],
+      "engine_span_is_child": true
+    }
+  ],
+  "all_linked": true
+}

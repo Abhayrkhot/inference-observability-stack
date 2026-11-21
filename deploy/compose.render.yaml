@@ -1,0 +1,15 @@
+# Optional: Grafana image renderer, so dashboards can be exported as PNG for any past time range:
+#   docker compose -f deploy/compose.yaml -f deploy/compose.render.yaml up -d grafana renderer prometheus tempo
+#   scripts/render_dashboard.sh <from-unix> <to-unix> docs/img/out.png
+services:
+  renderer:
+    image: grafana/grafana-image-renderer:v5.12.9
+    environment:
+      AUTH_TOKEN: inferobs-render
+    restart: unless-stopped
+
+  grafana:
+    environment:
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      GF_RENDERING_RENDERER_TOKEN: inferobs-render

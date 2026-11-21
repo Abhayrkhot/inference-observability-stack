@@ -1,0 +1,27 @@
+{
+  "git_sha": "44bcab0",
+  "host": "llm-server",
+  "cpus": 20,
+  "loadavg_end": 3.09,
+  "finished_unix": 1795291682.6,
+  "python": "3.12.16",
+  "proxy": "http://127.0.0.1:28000",
+  "model": "qwen2.5-0.5b-instruct",
+  "rates": [
+    1.7,
+    4.4,
+    7.0,
+    9.6,
+    12.2,
+    14.8,
+    17.4,
+    20.0
+  ],
+  "stage_s": 75.0,
+  "settle_s": 30.0,
+  "prompt": "lognormal:256:0.6:16:1024",
+  "output": "lognormal:128:0.6:8:512",
+  "ttft_slo_s": 1.0,
+  "tpot_slo_s": 0.05,
+  "run_dir": "saturation-20261121-195730"
+}

@@ -4,8 +4,8 @@
 # The GPU is shared with another project's queue, so each chunk takes the same flock
 # (GPU_LOCK, default ~/qildata/logs/gpu.lock) and waits until no other GPU job is running.
 #   scripts/run_gpu_experiments.sh            # chunks a and b
-#   scripts/run_gpu_experiments.sh a          # trace, capacity, saturation, agreement, overhead
-#   scripts/run_gpu_experiments.sh b          # faults (needs results/$TAG/capacity.json from chunk a)
+#   scripts/run_gpu_experiments.sh a          # trace, capacity, saturation, agreement
+#   scripts/run_gpu_experiments.sh b          # interleaved overhead, faults (needs chunk a's capacity.json)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LOCK=${GPU_LOCK:-$HOME/qildata/logs/gpu.lock}
@@ -54,8 +54,6 @@ chunk_a() {
   RATE=$(dev "python scripts/capacity.py --steady-from results/$TAG/capacity.json")
   log "agreement at $RATE req/s"
   dev "python -m inferobs exp agreement --model $MODEL --rate $RATE --duration 300 --tag $TAG"
-  log "overhead"
-  dev "python -m inferobs exp overhead --model $MODEL --levels 1,8,32 --duration 60 --repeats 3 --tag $TAG"
   log "chunk a done"
 }
 
@@ -63,6 +61,10 @@ chunk_b() {
   log "chunk b: stack up with faults overlay"
   stack_down
   up "$CF"
+  # Paired overhead: separate runs per target drift more than the proxy costs on this laptop GPU
+  # (power-capped clocks), so requests rotate through direct, proxy and proxy+tracing in each run.
+  log "overhead (interleaved)"
+  dev "python -m inferobs exp overhead --interleave --model $MODEL --levels 1,8,32 --duration 150 --tag $TAG"
   RATE=$(dev "python scripts/capacity.py --steady-from results/$TAG/capacity.json")
   log "faults at $RATE req/s"
   dev "python -m inferobs exp faults --engine-kind vllm --model $MODEL --rate $RATE --repeats 2 --tag $TAG"

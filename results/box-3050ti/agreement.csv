@@ -1,0 +1,55 @@
+metric,source,quantile,value_s,n,buckets
+ttft,client,0.5,0.050571,2131,
+ttft,client,0.9,0.083951,2131,
+ttft,client,0.99,0.118593,2131,
+ttft,proxy exact,0.5,0.048786,2131,
+ttft,proxy exact,0.9,0.082015,2131,
+ttft,proxy exact,0.99,0.116667,2131,
+itl,client,0.5,0.008235,262297,
+itl,client,0.9,0.011986,262297,
+itl,client,0.99,0.043246,262297,
+itl,proxy exact,0.5,0.008231,262297,
+itl,proxy exact,0.9,0.011902,262297,
+itl,proxy exact,0.99,0.042925,262297,
+tpot,client,0.5,0.00953,2131,
+tpot,client,0.9,0.010817,2131,
+tpot,client,0.99,0.012766,2131,
+tpot,proxy exact,0.5,0.009529,2131,
+tpot,proxy exact,0.9,0.010817,2131,
+tpot,proxy exact,0.99,0.012767,2131,
+e2e,client,0.5,1.072649,2131,
+e2e,client,0.9,2.342255,2131,
+e2e,client,0.99,4.079058,2131,
+e2e,proxy exact,0.5,1.07115,2131,
+e2e,proxy exact,0.9,2.34036,2131,
+e2e,proxy exact,0.99,4.077944,2131,
+ttft,proxy histogram,0.5,0.049001,2151,57
+ttft,proxy histogram,0.9,0.0827,2151,57
+ttft,proxy histogram,0.99,0.122301,2151,57
+itl,proxy histogram,0.5,0.008432,264795,55
+itl,proxy histogram,0.9,0.012247,264795,55
+itl,proxy histogram,0.99,0.044532,264795,55
+tpot,proxy histogram,0.5,0.009558,2151,55
+tpot,proxy histogram,0.9,0.01097,2151,55
+tpot,proxy histogram,0.99,0.013132,2151,55
+e2e,proxy histogram,0.5,1.085516,2151,51
+e2e,proxy histogram,0.9,2.367219,2151,51
+e2e,proxy histogram,0.99,4.075808,2151,51
+ttft,engine histogram (vLLM),0.5,0.047863,2169,22
+ttft,engine histogram (vLLM),0.9,0.078103,2169,22
+ttft,engine histogram (vLLM),0.99,0.193375,2169,22
+itl,engine histogram (vLLM),0.5,0.005428,275665,19
+itl,engine histogram (vLLM),0.9,0.009771,275665,19
+itl,engine histogram (vLLM),0.99,0.045448,275665,19
+tpot,engine histogram (vLLM),0.5,0.007113,2176,19
+tpot,engine histogram (vLLM),0.9,0.01995,2176,19
+tpot,engine histogram (vLLM),0.99,0.024495,2176,19
+e2e,engine histogram (vLLM),0.5,1.089192,2176,21
+e2e,engine histogram (vLLM),0.9,2.367219,2176,21
+e2e,engine histogram (vLLM),0.99,4.743899,2176,21
+ttft client - proxy,per-request diff,0.5,0.001607,2131,
+ttft client - proxy,per-request diff,0.9,0.00239,2131,
+ttft client - proxy,per-request diff,0.99,0.003499,2131,
+e2e client - proxy,per-request diff,0.5,0.001513,2131,
+e2e client - proxy,per-request diff,0.9,0.002276,2131,
+e2e client - proxy,per-request diff,0.99,0.003338,2131,
