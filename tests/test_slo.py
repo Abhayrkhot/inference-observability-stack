@@ -37,13 +37,16 @@ def test_le_matcher_is_a_valid_promql_string_regex():
 
 def test_workbook_tiers_and_thresholds():
     out = generate(SPEC)
-    alerts = out["groups"][-1]["rules"]
+    alerts = [r for g in out["groups"] for r in g["rules"] if "alert" in r]
     assert len(alerts) == 8  # 4 tiers x 2 SLOs
+    for g in out["groups"]:  # alerts come after the records they read, in the same group
+        kinds = ["alert" in r for r in g["rules"]]
+        assert kinds == sorted(kinds)
     fast = next(a for a in alerts if a["labels"]["slo"] == "avail" and a["labels"]["long_window"] == "1h")
     assert fast["labels"]["short_window"] == "5m" and fast["labels"]["severity"] == "page"
     assert "> 0.072" in fast["expr"]  # 14.4 x 0.5% budget
     assert fast["for"] == "2m"
-    records = {r["record"] for g in out["groups"][:-1] for r in g["rules"]}
+    records = {r["record"] for g in out["groups"] for r in g["rules"] if "record" in r}
     assert {
         "slo:sli_error:ratio_rate5m",
         "slo:sli_error:ratio_rate3d",
@@ -54,7 +57,9 @@ def test_workbook_tiers_and_thresholds():
 
 def test_window_scale_compresses_windows_and_for():
     out = generate({**SPEC, "window_scale": 1 / 12, "prefix": "slo_fast"})
-    fast = next(a for a in out["groups"][-1]["rules"] if a["labels"]["burn_rate"] == "14.4")
+    fast = next(
+        r for g in out["groups"] for r in g["rules"] if r.get("labels", {}).get("burn_rate") == "14.4"
+    )
     assert (fast["labels"]["long_window"], fast["labels"]["short_window"], fast["for"]) == (
         "5m",
         "25s",
@@ -85,7 +90,7 @@ def test_rejects_too_short_windows_and_bad_thresholds():
 
 def test_ratio_sli_reads_zero_without_error_series():
     out = generate(SPEC)
-    rec = next(r for r in out["groups"][0]["rules"] if r["record"] == "slo:sli_error:ratio_rate5m")
+    rec = next(r for r in out["groups"][0]["rules"] if r.get("record") == "slo:sli_error:ratio_rate5m")
     assert " or ((sum(rate(x_count[5m]))) * 0)" in rec["expr"]
 
 

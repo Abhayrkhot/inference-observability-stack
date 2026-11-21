@@ -140,8 +140,10 @@ def generate(spec: dict) -> dict:
     period_s = scaled(period)
     base_w = windows[0]
 
-    record_groups = []
-    alert_rules = []
+    # One group per SLO with its alerts after its recording rules: rules in a group run in order, so
+    # every alert sees this evaluation's SLI values. Separate groups run in no fixed order, which
+    # made alerts read the previous evaluation's values (one interval late) depending on scheduling.
+    groups = []
     for slo in spec["slos"]:
         name = slo["name"]
         obj = float(slo["objective"])
@@ -169,11 +171,10 @@ def generate(spec: dict) -> dict:
                 "labels": labels,
             }
         )
-        record_groups.append({"name": f"{prefix}-{name}-sli", "rules": rules})
         for t in tiers:
             lw, sw = scaled(t.long), scaled(t.short)
             thr = round(t.burn * budget, 10)
-            alert_rules.append(
+            rules.append(
                 {
                     "alert": alert_name,
                     "expr": (
@@ -199,7 +200,8 @@ def generate(spec: dict) -> dict:
                     },
                 }
             )
-    return {"groups": [*record_groups, {"name": f"{prefix}-alerts", "rules": alert_rules}]}
+        groups.append({"name": f"{prefix}-{name}", "rules": rules})
+    return {"groups": groups}
 
 
 class _Dumper(yaml.SafeDumper):
