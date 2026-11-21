@@ -99,6 +99,86 @@ def cmd_slo_gen(a: argparse.Namespace) -> None:
     print(f"wrote {out}")
 
 
+def _floats(s: str) -> list[float]:
+    return [float(x) for x in s.split(",") if x]
+
+
+def cmd_exp(a: argparse.Namespace) -> None:
+    from inferobs.exp.common import Prom
+
+    prom = Prom(a.prometheus)
+    if a.exp_cmd == "overhead":
+        from inferobs.exp import overhead
+
+        overhead.run(
+            a.engine_url,
+            a.model,
+            a.provider,
+            [int(x) for x in _floats(a.levels)],
+            a.duration,
+            a.repeats,
+            a.prompt,
+            a.output,
+            a.otlp,
+            tag=a.tag,
+            label=a.label,
+        )
+    elif a.exp_cmd == "agreement":
+        from inferobs.exp import agreement
+
+        agreement.run(
+            a.proxy_url,
+            a.model,
+            a.rate,
+            a.duration,
+            a.prompt,
+            a.output,
+            prom,
+            tag=a.tag,
+            label=a.label,
+            engine_label=a.engine_label,
+        )
+    elif a.exp_cmd == "saturation":
+        from inferobs.exp import saturation
+
+        saturation.run(
+            a.proxy_url,
+            a.model,
+            _floats(a.rates),
+            a.stage_s,
+            a.prompt,
+            a.output,
+            prom,
+            tag=a.tag,
+            label=a.label,
+        )
+    elif a.exp_cmd == "trace":
+        from inferobs.exp import trace
+
+        trace.run(a.proxy_url, a.tempo_url, a.model, a.n, tag=a.tag)
+    elif a.exp_cmd == "faults":
+        from inferobs.exp import faults
+
+        faults.run(
+            a.engine_kind,
+            a.engine_container,
+            a.engine_url,
+            a.proxy_url,
+            a.model,
+            a.rate,
+            a.prompt,
+            a.output,
+            a.scenarios.split(","),
+            a.repeats,
+            a.max_fault_s,
+            a.cooldown_s,
+            a.warmup_s,
+            prom,
+            tag=a.tag,
+            label=a.label,
+        )
+
+
 def cmd_alert_sink(a: argparse.Namespace) -> None:
     from inferobs.alertsink import run
 
@@ -118,7 +198,12 @@ def main(argv: list[str] | None = None) -> None:
     pp.add_argument("--idle-timeout", type=float, default=60.0)
     pp.add_argument("--health-interval", type=float, default=5.0)
     pp.add_argument("--access-log", default=_env("INFEROBS_ACCESS_LOG"))
-    pp.add_argument("--access-log-gaps", action="store_true")
+    pp.add_argument(
+        "--access-log-gaps",
+        action="store_true",
+        default=_env("INFEROBS_ACCESS_LOG_GAPS", "0") == "1",
+        help="include every chunk gap in the access log (for bucket-accuracy analysis)",
+    )
     pp.add_argument("--otlp-endpoint", default=_env("OTEL_EXPORTER_OTLP_ENDPOINT"))
     pp.add_argument("--sample-ratio", type=float, default=float(_env("INFEROBS_SAMPLE_RATIO", "1.0")))
     pp.add_argument("--service-name", default=_env("OTEL_SERVICE_NAME", "inferobs-proxy"))
@@ -166,6 +251,61 @@ def main(argv: list[str] | None = None) -> None:
     pg.add_argument("--out", required=True)
     pg.add_argument("--check", action="store_true", help="fail if --out differs from the generated rules")
     pg.set_defaults(fn=cmd_slo_gen)
+
+    pe = sub.add_parser("exp", help="experiments that write results/<host>/*.csv")
+    exp_sub = pe.add_subparsers(dest="exp_cmd", required=True)
+
+    def common(x, label):
+        x.add_argument("--model", required=True)
+        x.add_argument("--prompt", default="lognormal:256:0.6:16:1024")
+        x.add_argument("--output", default="lognormal:128:0.6:8:512")
+        x.add_argument("--prometheus", default="http://127.0.0.1:28090")
+        x.add_argument("--tag", help="results subdirectory (default: host name)")
+        x.add_argument("--label", default=label, help="output file stem")
+        x.set_defaults(fn=cmd_exp)
+
+    eo = exp_sub.add_parser("overhead", help="direct vs proxy vs proxy+tracing")
+    common(eo, "overhead")
+    eo.add_argument("--engine-url", default="http://127.0.0.1:28001")
+    eo.add_argument("--provider", default="vllm")
+    eo.add_argument("--levels", default="1,8,32")
+    eo.add_argument("--duration", type=float, default=60)
+    eo.add_argument("--repeats", type=int, default=3)
+    eo.add_argument("--otlp", default="http://127.0.0.1:28318")
+
+    ea = exp_sub.add_parser("agreement", help="client vs proxy vs Prometheus vs engine latency")
+    common(ea, "agreement")
+    ea.add_argument("--proxy-url", default="http://127.0.0.1:28000")
+    ea.add_argument("--rate", type=float, required=True)
+    ea.add_argument("--duration", type=float, default=300)
+    ea.add_argument("--engine-label", default="engine histogram (vLLM)")
+
+    es = exp_sub.add_parser("saturation", help="open-loop rate ramp")
+    common(es, "saturation")
+    es.add_argument("--proxy-url", default="http://127.0.0.1:28000")
+    es.add_argument("--rates", required=True, help="comma-separated arrival rates (req/s)")
+    es.add_argument("--stage-s", type=float, default=90)
+
+    et = exp_sub.add_parser("trace", help="check proxy and engine spans join into one trace")
+    common(et, "trace")
+    et.add_argument("--proxy-url", default="http://127.0.0.1:28000")
+    et.add_argument("--tempo-url", default="http://127.0.0.1:28200")
+    et.add_argument("--n", type=int, default=3)
+
+    ef = exp_sub.add_parser("faults", help="fault injection and alert detection times")
+    common(ef, "faults")
+    ef.add_argument("--engine-kind", choices=["sim", "vllm"], required=True)
+    ef.add_argument("--engine-container", default="inferobs-engine-1")
+    ef.add_argument("--engine-url", default="http://127.0.0.1:28001")
+    ef.add_argument("--proxy-url", default="http://127.0.0.1:28000")
+    ef.add_argument("--rate", type=float, required=True)
+    ef.add_argument(
+        "--scenarios", default="engine_crash,engine_hang,net_latency,stream_cut,overload,slow_decode"
+    )
+    ef.add_argument("--repeats", type=int, default=2)
+    ef.add_argument("--max-fault-s", type=float, default=240)
+    ef.add_argument("--cooldown-s", type=float, default=330)
+    ef.add_argument("--warmup-s", type=float, default=330)
 
     pa = sub.add_parser("alert-sink", help="Alertmanager webhook receiver that timestamps notifications")
     pa.add_argument("--host", default="0.0.0.0")

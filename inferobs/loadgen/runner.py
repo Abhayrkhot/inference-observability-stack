@@ -359,9 +359,8 @@ async def run_load(cfg: LoadConfig, on_result=None) -> tuple[list[Result], dict]
             t0_abs = t_run0 + t_sched  # latencies are measured from the scheduled arrival
             meter = StreamMeter(t_start=t0_abs)
             try:
-                async with session.post(
-                    url, data=body, headers={"Content-Type": "application/json", **cfg.headers}
-                ) as resp:
+                hdrs = {"Content-Type": "application/json", "X-Request-Id": f"lg-{r.id}", **cfg.headers}
+                async with session.post(url, data=body, headers=hdrs) as resp:
                     r.status = resp.status
                     r.ttfb_s = time.perf_counter() - t0_abs
                     if resp.status != 200:

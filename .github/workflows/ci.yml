@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[dev,analysis]'
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest -q
+      - name: Generated files are current
+        run: |
+          python -m inferobs slo gen --spec slo/slo.yaml --out deploy/prometheus/rules/slo.yaml --check
+          python -m inferobs slo gen --spec slo/slo-fast.yaml --out deploy/lab-rules/slo-fast.yaml --check
+          python scripts/build_dashboard.py --check
+          python scripts/gen_readme.py --check
+
+  promtool:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Config, rules and rule unit tests
+        run: |
+          P="docker run --rm -v $PWD/deploy:/d -w /d/prometheus --entrypoint promtool prom/prometheus:v3.5.0"
+          $P check config prometheus.yml
+          $P check rules rules/slo.yaml rules/alerts.yaml rules/recording.yaml ../lab-rules/slo-fast.yaml
+          $P test rules tests/slo_test.yaml tests/alerts_test.yaml
+
+  stack-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Start the stack with the simulated engine
+        run: docker compose -f deploy/compose.yaml -f deploy/compose.sim.yaml up -d --build
+      - name: Load it and check metrics, exemplars, traces and dashboards
+        run: python scripts/smoke_stack.py --duration 30
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f deploy/compose.yaml -f deploy/compose.sim.yaml logs --tail 100
+      - run: docker compose -f deploy/compose.yaml -f deploy/compose.sim.yaml down -v

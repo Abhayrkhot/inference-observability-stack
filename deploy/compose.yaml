@@ -22,6 +22,7 @@ services:
       OTEL_SERVICE_NAME: inferobs-proxy
       INFEROBS_BUCKETS: ${INFEROBS_BUCKETS:-fine}
       INFEROBS_SAMPLE_RATIO: ${INFEROBS_SAMPLE_RATIO:-1.0}
+      INFEROBS_ACCESS_LOG_GAPS: ${INFEROBS_ACCESS_LOG_GAPS:-0}
     ports: ["${BIND:-127.0.0.1}:${PROXY_PORT:-28000}:9000"]
     volumes: [proxy-logs:/logs]
     depends_on: [tempo]
@@ -63,7 +64,9 @@ services:
     volumes:
       - ./tempo:/etc/tempo:ro
       - tempo-data:/var/tempo
-    ports: ["${BIND:-127.0.0.1}:${TEMPO_PORT:-28200}:3200"]
+    ports:
+      - "${BIND:-127.0.0.1}:${TEMPO_PORT:-28200}:3200"
+      - "${BIND:-127.0.0.1}:${TEMPO_OTLP_PORT:-28318}:4318"  # OTLP/HTTP for processes outside compose
     restart: unless-stopped
 
   grafana:

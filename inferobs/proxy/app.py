@@ -335,7 +335,18 @@ class Proxy:
         finally:
             otel_context.detach(token)
             m.inflight.labels(u.provider).dec()
-            self._record(labels, meter, error_type, stream, span, u, model, status, wall0)
+            self._record(
+                labels,
+                meter,
+                error_type,
+                stream,
+                span,
+                u,
+                model,
+                status,
+                wall0,
+                request.headers.get("X-Request-Id"),
+            )
 
     async def _fail(self, request, resp, status, error_type, message) -> web.StreamResponse:
         payload = {"error": {"message": message, "type": error_type}}
@@ -358,6 +369,7 @@ class Proxy:
         model: str,
         status: int,
         wall0: float,
+        request_id: str | None = None,
     ) -> None:
         m = self.metrics
         t_end = time.perf_counter()
@@ -404,6 +416,7 @@ class Proxy:
         if self.access_log:
             rec = {
                 "ts": round(wall0, 6),
+                "request_id": request_id,
                 "trace_id": ex["trace_id"] if ex else None,
                 "provider": u.provider,
                 "model": model,

@@ -1,9 +1,11 @@
 # Dev/test image: Python deps preinstalled, source mounted at /src by scripts/dev.sh.
 FROM python:3.12-slim
+# Docker CLI only (talks to the host daemon through a mounted socket) for the fault experiments.
+COPY --from=docker:28.5-cli /usr/local/bin/docker /usr/local/bin/docker
 RUN pip install --no-cache-dir \
       "aiohttp>=3.10" "orjson>=3.10" "prometheus-client>=0.21" "pyyaml>=6.0" \
       "opentelemetry-api>=1.27" "opentelemetry-sdk>=1.27" "opentelemetry-exporter-otlp-proto-http>=1.27" \
       "numpy>=1.26" "matplotlib>=3.8" \
-      "pytest>=8" "pytest-asyncio>=0.24" "ruff>=0.6"
+      "uvloop>=0.19" "pytest>=8" "pytest-asyncio>=0.24" "ruff>=0.6"
 ENV PYTHONPATH=/src PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /src
