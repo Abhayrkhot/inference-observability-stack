@@ -363,7 +363,60 @@ def block_faults() -> str:
         table(["fault", "alert", "should", "fired", "detection (median, range)"], body)
         + f"\n\nDetection is the first Prometheus evaluation with the alert firing after injection, with the "
         f"compressed-window SLO rules (window_scale 1/12: the 1 h/5 m fast-burn page becomes 5 m/25 s) and "
-        f"a background load of {m.get('rate', '?')} req/s.{note} " + src(GPU_TAG, "faults")
+        f"a background load of {m.get('rate', '?')} req/s.{note} "
+        + src(GPU_TAG, "faults")
+        + block_fault_effects()
+    )
+
+
+def block_fault_effects() -> str:
+    r = rows(GPU_TAG, "fault_effects")
+    if not r:
+        return ""
+    import statistics
+
+    def med(xs: list[dict], key: str):
+        vals = [float(x[key]) for x in xs if x.get(key) not in (None, "", "None", "nan", "NaN")]
+        return statistics.median(vals) if vals else None
+
+    order = []
+    for x in r:
+        if x["scenario"] not in order:
+            order.append(x["scenario"])
+    body = []
+    for s in order:
+        xs = [x for x in r if x["scenario"] == s]
+
+        def pair(key: str, fmt, xs=xs) -> str:
+            b, d = med(xs, f"before_{key}"), med(xs, f"during_{key}")
+            return f"{fmt(b)} to {fmt(d)}"
+
+        body.append(
+            [
+                s,
+                pair("caller_ttfc_p50_s", lambda v: ms(v)),
+                pair("caller_ttfc_p99_s", lambda v: ms(v)),
+                pair("caller_gap_p50_s", lambda v: ms(v)),
+                pair("caller_error_ratio", lambda v: "n/a" if v is None else f"{v * 100:.1f}%"),
+                pair("engine_ttft_p99_s", lambda v: ms(v)),
+            ]
+        )
+    return (
+        "\n\nWhat each fault did, before (the minute before injection) to during (from 30 s after injection), "
+        "median over repeats:\n\n"
+        + table(
+            [
+                "fault",
+                "caller TTFC p50",
+                "caller TTFC p99",
+                "caller chunk gap p50",
+                "caller errors",
+                "vLLM TTFT p99",
+            ],
+            body,
+        )
+        + "\n\nCaller columns are the proxy's histograms; vLLM's are its own. "
+        + src(GPU_TAG, "fault_effects")
     )
 
 

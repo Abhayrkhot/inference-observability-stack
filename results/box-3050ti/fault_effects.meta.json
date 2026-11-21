@@ -1,0 +1,12 @@
+{
+  "git_sha": "ffd2fe2-dirty",
+  "host": "llm-server",
+  "cpus": 20,
+  "loadavg_end": 3.56,
+  "finished_unix": 1795304209.3,
+  "python": "3.12.16",
+  "source": "faults.csv",
+  "settle_s": 30,
+  "before_s": 60,
+  "note": "caller = proxy histograms, engine = vLLM histograms, over each fault window"
+}

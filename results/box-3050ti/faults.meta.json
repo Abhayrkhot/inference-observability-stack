@@ -1,0 +1,30 @@
+{
+  "git_sha": "49adce6",
+  "host": "llm-server",
+  "cpus": 20,
+  "loadavg_end": 8.34,
+  "finished_unix": 1795303958.7,
+  "python": "3.12.16",
+  "engine": "vllm",
+  "model": "qwen2.5-0.5b-instruct",
+  "rate": 7.4,
+  "prompt": "lognormal:256:0.6:16:1024",
+  "output": "lognormal:128:0.6:8:512",
+  "scenarios": [
+    "engine_crash",
+    "engine_hang",
+    "net_latency",
+    "stream_cut",
+    "overload",
+    "slow_decode"
+  ],
+  "repeats": 2,
+  "max_fault_s": 240,
+  "cooldown_s": 330,
+  "warmup_s": 330,
+  "run_dir": "faults-20261121-215213",
+  "rules": "deploy/lab-rules/slo-fast.yaml (window_scale 1/12)",
+  "scrape_interval": "5s",
+  "evaluation_interval": "5s",
+  "argv": "/src/inferobs/__main__.py exp faults --engine-kind vllm --model qwen2.5-0.5b-instruct --rate 7.4 --repeats 2 --tag box-3050ti"
+}

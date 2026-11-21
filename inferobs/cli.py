@@ -174,6 +174,10 @@ def cmd_exp(a: argparse.Namespace) -> None:
         from inferobs.exp import trace
 
         trace.run(a.proxy_url, a.tempo_url, a.model, a.n, tag=a.tag)
+    elif a.exp_cmd == "fault-effects":
+        from inferobs.exp import fault_effects
+
+        fault_effects.run(prom, tag=a.tag)
     elif a.exp_cmd == "faults":
         from inferobs.exp import faults
 
@@ -315,6 +319,11 @@ def main(argv: list[str] | None = None) -> None:
     et.add_argument("--proxy-url", default="http://127.0.0.1:28000")
     et.add_argument("--tempo-url", default="http://127.0.0.1:28200")
     et.add_argument("--n", type=int, default=3)
+
+    efe = exp_sub.add_parser("fault-effects", help="before/during caller and engine signals per fault window")
+    efe.add_argument("--prometheus", default="http://127.0.0.1:28090")
+    efe.add_argument("--tag", help="results subdirectory (default: host name)")
+    efe.set_defaults(fn=cmd_exp)
 
     ef = exp_sub.add_parser("faults", help="fault injection and alert detection times")
     common(ef, "faults")
