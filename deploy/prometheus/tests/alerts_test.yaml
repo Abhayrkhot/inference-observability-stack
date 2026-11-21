@@ -1,0 +1,80 @@
+# promtool unit tests for the symptom alerts and the recording rules they use.
+rule_files:
+  - ../rules/alerts.yaml
+  - ../rules/recording.yaml
+
+evaluation_interval: 15s
+
+tests:
+  - interval: 15s
+    input_series:
+      - series: 'up{job="engine", instance="engine:8000"}'
+        values: '1 1 1 1 0 0 0 0 0 0'
+      - series: 'inferobs_upstream_up{gen_ai_provider_name="vllm", instance="proxy:9000", job="proxy"}'
+        values: '1 1 1 1 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 1m15s
+        alertname: InferenceEngineScrapeDown
+        exp_alerts: []
+      - eval_time: 1m30s
+        alertname: InferenceEngineScrapeDown
+        exp_alerts:
+          - exp_labels: {severity: page, view: engine, job: engine, instance: "engine:8000"}
+            exp_annotations:
+              summary: Prometheus cannot scrape the inference engine
+              description: engine:8000 has failed scrapes for 30s.
+      - eval_time: 1m30s
+        alertname: InferenceUpstreamUnhealthy
+        exp_alerts:
+          - exp_labels: {severity: page, view: caller, gen_ai_provider_name: vllm}
+            exp_annotations:
+              summary: The proxy's health probe to vllm is failing
+              description: "Probe failing for 30s. A probe can also fail when the engine is saturated: check the scheduler queue before restarting it."
+
+  # Caller-side TTFC p99 rises above 2 s while the engine's own TTFT stays fast: only the caller
+  # alert fires (the network/proxy-path case the engine histogram cannot see).
+  - interval: 15s
+    input_series:
+      - series: 'gen_ai_client_operation_time_to_first_chunk_seconds_bucket{le="0.5", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+150x8 1200x16'
+      - series: 'gen_ai_client_operation_time_to_first_chunk_seconds_bucket{le="5.0", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+150x24'
+      - series: 'gen_ai_client_operation_time_to_first_chunk_seconds_bucket{le="+Inf", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+150x24'
+      - series: 'vllm:time_to_first_token_seconds_bucket{le="0.1", model_name="m", engine="0"}'
+        values: '0+150x24'
+      - series: 'vllm:time_to_first_token_seconds_bucket{le="+Inf", model_name="m", engine="0"}'
+        values: '0+150x24'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: CallerTTFCHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, view: caller, gen_ai_provider_name: vllm, gen_ai_request_model: m}
+            exp_annotations:
+              summary: Caller-side time to first chunk p99 above 2s
+              description: p99 is 4.955s for m.
+      - eval_time: 6m
+        alertname: EngineTTFTHigh
+        exp_alerts: []
+
+  - interval: 15s
+    input_series:
+      - series: 'vllm:num_requests_waiting{model_name="m", engine="0"}'
+        values: '0 0 0 0 40 40 40 40 40 40 40 40 40 40 40 40'
+      - series: 'vllm:kv_cache_usage_perc{model_name="m", engine="0"}'
+        values: '0.5 0.5 0.99 0.99 0.99 0.99 0.99 0.99 0.99 0.99 0.99 0.99 0.99 0.99 0.99 0.99'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: EngineQueueBacklog
+        exp_alerts:
+          - exp_labels: {severity: ticket, view: engine, model_name: m}
+            exp_annotations:
+              summary: Requests are queueing in the engine scheduler
+              description: "40 requests waiting on average over 1m: the engine is at capacity."
+      - eval_time: 3m
+        alertname: EngineKVCacheSaturated
+        exp_alerts:
+          - exp_labels: {severity: ticket, view: engine, model_name: m}
+            exp_annotations:
+              summary: KV cache above 95%
+              description: New requests wait for cache space and running ones may be preempted.

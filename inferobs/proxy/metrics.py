@@ -25,11 +25,24 @@ def geometric(lo: float, hi: float, factor: float) -> tuple[float, ...]:
     return tuple(out)
 
 
-# "fine" layout: geometric buckets sized for small/fast models where decode steps are a few ms.
-# Measured against the semconv layout in the bucket-accuracy experiment (docs/experiments.md).
-FINE_DURATION = geometric(0.005, 120.0, 1.25)
-FINE_TTFT = geometric(0.002, 30.0, 1.2)
-FINE_TPOT = geometric(0.0005, 5.0, 1.2)
+# Round thresholds an SLO is likely to use. A latency SLI needs its threshold to be a bucket bound.
+ROUND_SECONDS = (0.005, 0.01, 0.02, 0.025, 0.05, 0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 2.5, 5.0, 10.0, 30.0, 60.0)
+
+
+def with_round_bounds(base: tuple[float, ...], tol: float = 0.06) -> tuple[float, ...]:
+    """Add ROUND_SECONDS inside base's range, dropping base bounds within ``tol`` of a round one."""
+    lo, hi = base[0], base[-1]
+    rounds = [r for r in ROUND_SECONDS if lo <= r <= hi]
+    kept = [b for b in base if all(abs(b - r) / r > tol for r in rounds)]
+    return tuple(sorted(set(kept) | set(rounds)))
+
+
+# "fine" layout: geometric buckets (ratio 1.2 to 1.25) sized for small/fast models where decode steps
+# take a few ms, plus round SLO thresholds. Compared with the semconv layout in the bucket-accuracy
+# experiment.
+FINE_DURATION = with_round_bounds(geometric(0.005, 120.0, 1.25))
+FINE_TTFT = with_round_bounds(geometric(0.002, 30.0, 1.2))
+FINE_TPOT = with_round_bounds(geometric(0.0005, 5.0, 1.2))
 
 LAYOUTS = {
     "semconv": {"duration": SEMCONV_DURATION, "ttft": SEMCONV_TTFT, "tpot": SEMCONV_TPOT},

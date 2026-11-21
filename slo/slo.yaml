@@ -1,0 +1,26 @@
+# SLOs for the LLM gateway, measured at the proxy (what callers experience).
+# Generate rules with: make rules   (writes deploy/prometheus/rules/slo.yaml)
+period: 30d
+prefix: slo
+alert_name: SLOErrorBudgetBurn
+window_scale: 1
+scrape_interval: 5s
+slos:
+  - name: availability
+    objective: 0.995
+    description: Requests that complete without an error (client cancellations excluded).
+    ratio:
+      errors: sum(rate(gen_ai_client_operation_duration_seconds_count{error_type!~"|cancelled"}[$window]))
+      total: sum(rate(gen_ai_client_operation_duration_seconds_count{error_type!="cancelled"}[$window]))
+  - name: ttfc
+    objective: 0.99
+    description: Streaming requests whose first chunk arrives within 1 s of reaching the proxy.
+    latency:
+      metric: gen_ai_client_operation_time_to_first_chunk_seconds
+      threshold: 1.0
+  - name: tpot
+    objective: 0.99
+    description: Requests whose mean time per output token is at most 50 ms (20 tokens/s or faster).
+    latency:
+      metric: inferobs_time_per_output_token_seconds
+      threshold: 0.05

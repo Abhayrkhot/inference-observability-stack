@@ -37,3 +37,6 @@ promtool:
 
 dashboard:
 	python scripts/build_dashboard.py
+
+lab-rules:
+	python -m inferobs slo gen --spec slo/slo-fast.yaml --out deploy/lab-rules/slo-fast.yaml

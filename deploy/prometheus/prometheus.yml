@@ -6,6 +6,8 @@ global:
 
 rule_files:
   - /etc/prometheus/rules/*.yaml
+  # Compressed-window SLO rules, mounted only by the faults overlay (deploy/lab-rules).
+  - /etc/prometheus-lab/*.yaml
 
 alerting:
   alertmanagers:

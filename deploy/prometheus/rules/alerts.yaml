@@ -1,0 +1,68 @@
+# Symptom and cause alerts that complement the SLO burn-rate alerts (rules/slo.yaml).
+# "Caller" alerts use the proxy's view, "engine" alerts use vLLM's own metrics; the fault experiments
+# compare how fast each one notices the same fault.
+groups:
+  - name: inferobs-availability
+    rules:
+      - alert: InferenceEngineScrapeDown
+        expr: up{job="engine"} == 0
+        for: 30s
+        labels: {severity: page, view: engine}
+        annotations:
+          summary: Prometheus cannot scrape the inference engine
+          description: "{{ $labels.instance }} has failed scrapes for 30s."
+      - alert: InferenceUpstreamUnhealthy
+        expr: min by (gen_ai_provider_name) (inferobs_upstream_up) == 0
+        for: 30s
+        labels: {severity: page, view: caller}
+        annotations:
+          summary: The proxy's health probe to {{ $labels.gen_ai_provider_name }} is failing
+          description: "Probe failing for 30s. A probe can also fail when the engine is saturated: check the scheduler queue before restarting it."
+      - alert: InferenceProxyDown
+        expr: up{job="proxy"} == 0
+        for: 1m
+        labels: {severity: page, view: caller}
+        annotations:
+          summary: Metering proxy is not being scraped
+          description: Without the proxy, every caller-side SLO goes blind.
+
+  - name: inferobs-latency
+    rules:
+      - alert: CallerTTFCHigh
+        expr: provider_model:gen_ai_ttfc_seconds:p99_1m > 2
+        for: 1m
+        labels: {severity: ticket, view: caller}
+        annotations:
+          summary: Caller-side time to first chunk p99 above 2s
+          description: "p99 is {{ $value | humanizeDuration }} for {{ $labels.gen_ai_request_model }}."
+      - alert: EngineTTFTHigh
+        expr: model:vllm_ttft_seconds:p99_1m > 2
+        for: 1m
+        labels: {severity: ticket, view: engine}
+        annotations:
+          summary: Engine-side time to first token p99 above 2s
+          description: "p99 is {{ $value | humanizeDuration }} for {{ $labels.model_name }}."
+      - alert: CallerDecodeStalls
+        expr: provider_model:gen_ai_chunk_gap_seconds:p99_1m > 0.5
+        for: 1m
+        labels: {severity: ticket, view: caller}
+        annotations:
+          summary: Streams are stalling between chunks
+          description: "p99 gap between chunks is {{ $value | humanizeDuration }}."
+
+  - name: inferobs-saturation
+    rules:
+      - alert: EngineQueueBacklog
+        expr: sum by (model_name) (avg_over_time(vllm:num_requests_waiting[1m])) > 16
+        for: 1m
+        labels: {severity: ticket, view: engine}
+        annotations:
+          summary: Requests are queueing in the engine scheduler
+          description: "{{ $value }} requests waiting on average over 1m: the engine is at capacity."
+      - alert: EngineKVCacheSaturated
+        expr: max by (model_name) (vllm:kv_cache_usage_perc) > 0.95
+        for: 2m
+        labels: {severity: ticket, view: engine}
+        annotations:
+          summary: KV cache above 95%
+          description: New requests wait for cache space and running ones may be preempted.

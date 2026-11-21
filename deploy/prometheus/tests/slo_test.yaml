@@ -1,0 +1,98 @@
+# promtool unit tests for the generated SLO rules (make promtool).
+# Series use 1-minute samples; counters at 10 req/s grow by 600 per sample.
+rule_files:
+  - ../rules/slo.yaml
+  - ../rules/recording.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # Full outage starting at 60m: successes stop, every request fails.
+  # Fast page (1h & 5m > 14.4 x 0.5% = 7.2%): true from 65m (1h ratio 3000/36000), fires after for=2m.
+  # Slow page (6h & 30m > 3%): true from 62m, fires after for=15m. Tickets need for=1h.
+  - interval: 1m
+    input_series:
+      - series: 'gen_ai_client_operation_duration_seconds_count{error_type="", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+600x60 36000x120'
+      - series: 'gen_ai_client_operation_duration_seconds_count{error_type="503", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0x60 600+600x120'
+    alert_rule_test:
+      - eval_time: 66m
+        alertname: SLOErrorBudgetBurn
+        exp_alerts: []
+      - eval_time: 68m
+        alertname: SLOErrorBudgetBurn
+        exp_alerts:
+          - exp_labels: {severity: page, slo: availability, long_window: 1h, short_window: 5m, burn_rate: "14.4"}
+            exp_annotations:
+              summary: availability SLO is burning its error budget at 14.4x or faster
+              description: Requests that complete without an error (client cancellations excluded). Error ratio over 1h is 13.36% against a budget of 0.5000% (99.50% objective over 30d).
+      - eval_time: 80m
+        alertname: SLOErrorBudgetBurn
+        exp_alerts:
+          - exp_labels: {severity: page, slo: availability, long_window: 1h, short_window: 5m, burn_rate: "14.4"}
+            exp_annotations:
+              summary: availability SLO is burning its error budget at 14.4x or faster
+              description: Requests that complete without an error (client cancellations excluded). Error ratio over 1h is 33.52% against a budget of 0.5000% (99.50% objective over 30d).
+          - exp_labels: {severity: page, slo: availability, long_window: 6h, short_window: 30m, burn_rate: "6"}
+            exp_annotations:
+              summary: availability SLO is burning its error budget at 6x or faster
+              description: Requests that complete without an error (client cancellations excluded). Error ratio over 6h is 25% against a budget of 0.5000% (99.50% objective over 30d).
+
+  # Healthy: 0.2% errors for 3h stays inside a 0.5% budget, so nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'gen_ai_client_operation_duration_seconds_count{error_type="", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+598.8x180'
+      - series: 'gen_ai_client_operation_duration_seconds_count{error_type="500", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+1.2x180'
+      - series: 'gen_ai_client_operation_duration_seconds_count{error_type="cancelled", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+300x180'
+    alert_rule_test:
+      - eval_time: 180m
+        alertname: SLOErrorBudgetBurn
+        exp_alerts: []
+    promql_expr_test:
+      # Cancellations are neither errors nor part of the total.
+      - expr: slo:sli_error:ratio_rate1h{slo="availability"}
+        eval_time: 180m
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate1h{slo="availability"}'
+            value: 1.9999999999999714E-03
+      # No error series at all must read 0, not "no data".
+      - expr: slo:objective:ratio{slo="ttfc"}
+        eval_time: 10m
+        exp_samples:
+          - labels: 'slo:objective:ratio{slo="ttfc"}'
+            value: 0.99
+
+  # Latency SLO: half of the first chunks arrive later than 1 s from 60m on. The 1h error ratio
+  # passes 14.4 x 1% = 14.4% at about 79m (12.5% at 75m), so the fast page fires after for=2m.
+  - interval: 1m
+    input_series:
+      - series: 'gen_ai_client_operation_time_to_first_chunk_seconds_bucket{le="1.0", gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+600x60 36300+300x60'
+      - series: 'gen_ai_client_operation_time_to_first_chunk_seconds_count{gen_ai_operation_name="chat", gen_ai_provider_name="vllm", gen_ai_request_model="m"}'
+        values: '0+600x120'
+    alert_rule_test:
+      - eval_time: 78m
+        alertname: SLOErrorBudgetBurn
+        exp_alerts: []
+      - eval_time: 85m
+        alertname: SLOErrorBudgetBurn
+        exp_alerts:
+          - exp_labels: {severity: page, slo: ttfc, long_window: 1h, short_window: 5m, burn_rate: "14.4"}
+            exp_annotations:
+              summary: ttfc SLO is burning its error budget at 14.4x or faster
+              description: Streaming requests whose first chunk arrives within 1 s of reaching the proxy. Error ratio over 1h is 21.19% against a budget of 1.0000% (99.00% objective over 30d).
+          # The series only start at 0m, so the 6h window holds 85m of data and the slow page fires too.
+          - exp_labels: {severity: page, slo: ttfc, long_window: 6h, short_window: 30m, burn_rate: "6"}
+            exp_annotations:
+              summary: ttfc SLO is burning its error budget at 6x or faster
+              description: Streaming requests whose first chunk arrives within 1 s of reaching the proxy. Error ratio over 6h is 14.71% against a budget of 1.0000% (99.00% objective over 30d).
+    promql_expr_test:
+      - expr: slo:sli_error:ratio_rate5m{slo="ttfc"}
+        eval_time: 90m
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate5m{slo="ttfc"}'
+            value: 0.5

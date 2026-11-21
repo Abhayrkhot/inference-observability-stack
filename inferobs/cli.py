@@ -83,6 +83,22 @@ def cmd_loadgen(a: argparse.Namespace) -> None:
     print(json.dumps(s, indent=2))
 
 
+def cmd_slo_gen(a: argparse.Namespace) -> None:
+    from pathlib import Path
+
+    from inferobs.slo.gen import render
+
+    text = render(a.spec)
+    out = Path(a.out)
+    if a.check:
+        if not out.exists() or out.read_text() != text:
+            raise SystemExit(f"{out} is stale; regenerate with: inferobs slo gen --spec {a.spec} --out {out}")
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+    print(f"wrote {out}")
+
+
 def cmd_alert_sink(a: argparse.Namespace) -> None:
     from inferobs.alertsink import run
 
@@ -142,6 +158,14 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--gaps-out", help="per-request chunk gaps (JSON lines)")
     pl.add_argument("--summary-out", help="summary JSON")
     pl.set_defaults(fn=cmd_loadgen)
+
+    pslo = sub.add_parser("slo", help="SLO tooling")
+    slo_sub = pslo.add_subparsers(dest="slo_cmd", required=True)
+    pg = slo_sub.add_parser("gen", help="generate recording + burn-rate alert rules from an SLO spec")
+    pg.add_argument("--spec", required=True)
+    pg.add_argument("--out", required=True)
+    pg.add_argument("--check", action="store_true", help="fail if --out differs from the generated rules")
+    pg.set_defaults(fn=cmd_slo_gen)
 
     pa = sub.add_parser("alert-sink", help="Alertmanager webhook receiver that timestamps notifications")
     pa.add_argument("--host", default="0.0.0.0")

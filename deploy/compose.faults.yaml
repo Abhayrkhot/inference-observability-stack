@@ -1,6 +1,13 @@
 # Fault overlay: route proxy -> toxiproxy -> engine so latency, bandwidth limits and connection
-# resets can be injected between them (toxiproxy API on TOXIPROXY_PORT).
+# resets can be injected between them (toxiproxy API on TOXIPROXY_PORT), and load the
+# compressed-window (1/12) SLO rules so burn-rate alerts fire within minutes.
 services:
+  prometheus:
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - ./lab-rules:/etc/prometheus-lab:ro
+      - prom-data:/prometheus
+
   toxiproxy:
     image: ghcr.io/shopify/toxiproxy:2.12.0
     command: [-host=0.0.0.0, -config=/etc/toxiproxy/proxies.json]
