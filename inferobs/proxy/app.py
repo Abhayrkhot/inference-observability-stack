@@ -287,6 +287,7 @@ class Proxy:
                 h_gap = m.tpoc.labels(*labels)
                 async for chunk in up.content.iter_any():
                     now = time.perf_counter()
+                    out: list[bytes] = []
                     for raw, data in parser.feed(chunk):
                         kind = meter.on_event(data, now)
                         if kind is EventKind.CONTENT:
@@ -297,12 +298,13 @@ class Proxy:
                                 h_gap.observe(meter.gaps[-1])
                         if injected and kind is EventKind.USAGE_ONLY:
                             continue
-                        try:
-                            await resp.write(raw)
-                        except ConnectionResetError:
-                            client_gone = True
-                            break
-                    if client_gone:
+                        out.append(raw)
+                    if not out:
+                        continue
+                    try:  # one write per upstream read, however many events it carried
+                        await resp.write(out[0] if len(out) == 1 else b"".join(out))
+                    except ConnectionResetError:
+                        client_gone = True
                         break
                 if client_gone:
                     # Leaving the `async with` closes the upstream connection, which makes the engine

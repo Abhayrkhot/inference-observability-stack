@@ -16,8 +16,9 @@ CF="$C -f deploy/compose.faults.yaml"
 dev() { IOS_DOCKER=1 scripts/dev.sh "$@"; }
 log() { echo "== $(date -Is) load $(cut -d' ' -f1 /proc/loadavg) $*"; }
 
-wait_gpu_free() {
+wait_gpu_free() {  # no other GPU job, and no other inferobs experiment using the stack
   while docker ps -q --filter ancestor=qil-dev:latest --filter ancestor=qil-ref:latest | grep -q . ||
+        docker ps -q --filter ancestor=inferobs-dev:py3.12 | grep -q . ||
         [ -n "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader)" ]; do
     sleep 30
   done
