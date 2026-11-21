@@ -110,6 +110,9 @@ def cmd_exp(a: argparse.Namespace) -> None:
     if a.exp_cmd == "overhead":
         from inferobs.exp import overhead
 
+        if a.reanalyze:
+            overhead.reanalyze(a.reanalyze, a.tag, a.label, a.settle_s)
+            return
         if a.interleave:
             overhead.run_interleaved(
                 a.engine_url,
@@ -289,6 +292,10 @@ def main(argv: list[str] | None = None) -> None:
     eo.add_argument("--otlp", default="http://127.0.0.1:28318")
     eo.add_argument("--interleave", action="store_true", help="rotate targets per request within each run")
     eo.add_argument("--port-base", type=int, default=28010, help="ports for the two experiment proxies")
+    eo.add_argument("--settle-s", type=float, default=10.0, help="skip requests scheduled before this")
+    eo.add_argument(
+        "--reanalyze", metavar="RUN_DIR", help="rebuild results from an interleaved run directory"
+    )
 
     ea = exp_sub.add_parser("agreement", help="client vs proxy vs Prometheus vs engine latency")
     common(ea, "agreement")

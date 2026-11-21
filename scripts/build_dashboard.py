@@ -372,12 +372,14 @@ def build() -> dict:
         "annotations": {
             "list": [
                 {
-                    "name": "Alerts",
+                    # Pages only: ticket-tier burn alerts can stay active for days and would shade
+                    # every panel for the whole range.
+                    "name": "Paging alerts",
                     "datasource": DS,
                     "enable": True,
                     "iconColor": "red",
-                    "expr": 'ALERTS{alertstate="firing"}',
-                    "titleFormat": "{{alertname}}",
+                    "expr": 'ALERTS{alertstate="firing", severity="page"}',
+                    "titleFormat": "{{alertname}} {{slo}}",
                     "step": "15s",
                 }
             ]

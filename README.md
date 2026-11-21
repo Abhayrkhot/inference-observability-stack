@@ -11,6 +11,7 @@ Measured on one NVIDIA GeForce RTX 3050 Ti Laptop GPU (4 GB), vLLM 0.34.0 servin
 ## Results
 
 <!-- BEGIN GENERATED: headline -->
+- **The proxy's latency cost is below what 629 paired requests can resolve:** at 32 streams TTFT changes by +1.7 ms at p50 (95% CI -1.79 to 5.71 ms) and -3.5 ms at p99 (-19.25 to 12.47 ms). It costs 149 us of CPU per streamed token with every request traced.
 - **The dashboard's TTFT p99 is within 4.8% of the exact value** computed from every request in the access log.
 - **vLLM's default buckets misreport TPOT p99 by +92%** on this GPU (true value 12.8 ms, below the lowest 10 ms bound); the proxy's layout is off by +2.9%.
 - **Capacity at SLO: 14.8 req/s** (1,820 output tok/s) before TTFT p99 passes 1 s or TPOT p99 passes 50 ms.
@@ -70,7 +71,19 @@ flowchart LR
 ### 1. What metering costs
 
 <!-- BEGIN GENERATED: overhead -->
-_Not measured yet: run the `overhead` experiment (see Reproducing)._
+| streams | target | requests | TTFT p50 | TTFT p99 | TTFT p50 delta (95% CI) | TTFT p99 delta | TPOT p50 delta | proxy CPU | CPU per token |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | direct | 50 | 31.77 ms | 64.15 ms |  |  |  |  |  |
+| 1 | proxy | 50 | 34.88 ms | 97.31 ms | 3.11 ms (-1.15 to 6.89) | 33.16 ms | 3 us | 1.2% | 250 us |
+| 1 | proxy+tracing | 50 | 33.54 ms | 71.58 ms | 1.78 ms (-2.61 to 7.09) | 7.43 ms | 0 us | 1.1% | 259 us |
+| 8 | direct | 302 | 47.30 ms | 105.89 ms |  |  |  |  |  |
+| 8 | proxy | 302 | 47.97 ms | 107.62 ms | 0.67 ms (-1.42 to 2.89) | 1.74 ms | 63 us | 4.5% | 165 us |
+| 8 | proxy+tracing | 301 | 48.44 ms | 98.89 ms | 1.14 ms (-0.14 to 3.48) | -6.99 ms | -12 us | 4.5% | 169 us |
+| 32 | direct | 628 | 84.58 ms | 174.61 ms |  |  |  |  |  |
+| 32 | proxy | 629 | 86.28 ms | 171.12 ms | 1.69 ms (-1.79 to 5.71) | -3.49 ms | -54 us | 8.3% | 146 us |
+| 32 | proxy+tracing | 628 | 84.37 ms | 173.94 ms | -0.21 ms (-2.98 to 3.74) | -0.67 ms | -132 us | 8.4% | 149 us |
+
+Each row group is one 150 s closed-loop run whose requests rotate through the three targets, so every target sees the same engine state; deltas are against `direct` in the same run, with bootstrap 95% intervals. Requests scheduled in the first 10 s of each run are excluded: all workers start at once, and which target lands in a later prefill wave of that first burst depends on sub-millisecond arrival order (it made the unfiltered p99 look 180 ms worse through the proxy). Separate runs per target were tried first and discarded: this laptop GPU runs power-capped (SM clock 1.3 of 2.1 GHz under load) and its speed drifts between runs by more than the proxy costs. Proxy CPU is that proxy process's CPU time over wall time (100% = one core) while serving a third of the requests. Source: `results/box-3050ti/overhead.csv`, commit `49adce6`.
 <!-- END GENERATED: overhead -->
 
 ### 2. Do the caller, the proxy, Prometheus and vLLM agree?

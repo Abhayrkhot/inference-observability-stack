@@ -86,15 +86,19 @@ def block_headline() -> str:
     fl = rows(GPU_TAG, "faults")
     sat = rows(GPU_TAG, "saturation")
     out = []
-    p1 = next((r for r in ov if r["target"] == "proxy" and r["concurrency"] == "1"), None)
-    t1 = next((r for r in ov if r["target"] == "proxy+tracing" and r["concurrency"] == "1"), None)
-    p32 = next((r for r in ov if r["target"] == "proxy+tracing" and r["concurrency"] == "32"), None)
-    if p1 and t1:
+    p32 = next((r for r in ov if r["target"] == "proxy" and r["concurrency"] == "32"), None)
+    t32 = next((r for r in ov if r["target"] == "proxy+tracing" and r["concurrency"] == "32"), None)
+    if p32 and t32:
+
+        def rng(x: dict, key: str) -> str:
+            return x[key].replace("..", " to ")
+
         out.append(
-            f"- **Metering adds {f(p1['ttft_p50_delta_ms'], digits=2)} ms to TTFT at p50** for a single stream "
-            f"(95% CI {p1['ttft_p50_delta_ci_ms'].replace('..', ' to ')} ms), "
-            f"{f(t1['ttft_p50_delta_ms'], digits=2)} ms with every request traced; at 32 streams the traced "
-            f"proxy uses {f(p32['proxy_cpu_us_per_token'], digits=0) if p32 else 'n/a'} us of CPU per token."
+            f"- **The proxy's latency cost is below what {p32['requests']} paired requests can resolve:** at 32 "
+            f"streams TTFT changes by {float(p32['ttft_p50_delta_ms']):+.1f} ms at p50 (95% CI "
+            f"{rng(p32, 'ttft_p50_delta_ci_ms')} ms) and {float(p32['ttft_p99_delta_ms']):+.1f} ms at p99 "
+            f"({rng(p32, 'ttft_p99_delta_ci_ms')} ms). It costs {f(t32['proxy_cpu_us_per_token'], digits=0)} us "
+            "of CPU per streamed token with every request traced."
         )
     k = ("ttft", "proxy histogram", "0.99")
     e = ("ttft", "proxy exact", "0.99")
@@ -196,7 +200,10 @@ def block_overhead() -> str:
         )
         + f"\n\nEach row group is one {f(m.get('duration_s'), digits=0)} s closed-loop run whose requests rotate "
         "through the three targets, so every target sees the same engine state; deltas are against `direct` "
-        "in the same run, with bootstrap 95% intervals. Separate runs per target were tried first and "
+        "in the same run, with bootstrap 95% intervals. Requests scheduled in the first "
+        f"{f(m.get('settle_s'), digits=0)} s of each run are excluded: all workers start at once, and which "
+        "target lands in a later prefill wave of that first burst depends on sub-millisecond arrival order "
+        "(it made the unfiltered p99 look 180 ms worse through the proxy). Separate runs per target were tried first and "
         "discarded: this laptop GPU runs power-capped (SM clock 1.3 of 2.1 GHz under load) and its speed "
         "drifts between runs by more than the proxy costs. Proxy CPU is that proxy process's CPU time over "
         "wall time (100% = one core) while serving a third of the requests. " + src(GPU_TAG, "overhead")

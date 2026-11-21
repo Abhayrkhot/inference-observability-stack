@@ -1,0 +1,23 @@
+{
+  "host": "llm-server",
+  "cpus": 20,
+  "loadavg_end": 10.13,
+  "finished_unix": 1795298027.2,
+  "python": "3.12.16",
+  "method": "interleaved: requests rotate direct, proxy, proxy+tracing within each run",
+  "settle_s": 10.0,
+  "run_dir": "overhead-20261121-214410",
+  "engine": "http://127.0.0.1:28001",
+  "model": "qwen2.5-0.5b-instruct",
+  "levels": [
+    1,
+    8,
+    32
+  ],
+  "duration_s": 150.0,
+  "prompt": "lognormal:256:0.6:16:1024",
+  "output": "lognormal:128:0.6:8:512",
+  "measured_at_git_sha": "49adce6",
+  "reanalyzed_at_git_sha": "49adce6-dirty",
+  "git_sha": "49adce6"
+}

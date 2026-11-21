@@ -62,15 +62,15 @@
   "annotations": {
     "list": [
       {
-        "name": "Alerts",
+        "name": "Paging alerts",
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
         "enable": true,
         "iconColor": "red",
-        "expr": "ALERTS{alertstate=\"firing\"}",
-        "titleFormat": "{{alertname}}",
+        "expr": "ALERTS{alertstate=\"firing\", severity=\"page\"}",
+        "titleFormat": "{{alertname}} {{slo}}",
         "step": "15s"
       }
     ]
