@@ -1,0 +1,18 @@
+# Fault overlay: route proxy -> toxiproxy -> engine so latency, bandwidth limits and connection
+# resets can be injected between them (toxiproxy API on TOXIPROXY_PORT).
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    command: [-host=0.0.0.0, -config=/etc/toxiproxy/proxies.json]
+    volumes: [./toxiproxy:/etc/toxiproxy:ro]
+    ports: ["${BIND:-127.0.0.1}:${TOXIPROXY_PORT:-28474}:8474"]
+    restart: unless-stopped
+
+  proxy:
+    environment:
+      ENGINE_URL: http://toxiproxy:8001
+    command:
+      - proxy
+      - --upstream=${ENGINE_PROVIDER:-sim}=http://toxiproxy:8001
+      - --port=9000
+      - --access-log=/logs/access.jsonl

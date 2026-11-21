@@ -83,6 +83,12 @@ def cmd_loadgen(a: argparse.Namespace) -> None:
     print(json.dumps(s, indent=2))
 
 
+def cmd_alert_sink(a: argparse.Namespace) -> None:
+    from inferobs.alertsink import run
+
+    run(a.host, a.port, a.out)
+
+
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     p = argparse.ArgumentParser(prog="inferobs")
@@ -136,6 +142,12 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--gaps-out", help="per-request chunk gaps (JSON lines)")
     pl.add_argument("--summary-out", help="summary JSON")
     pl.set_defaults(fn=cmd_loadgen)
+
+    pa = sub.add_parser("alert-sink", help="Alertmanager webhook receiver that timestamps notifications")
+    pa.add_argument("--host", default="0.0.0.0")
+    pa.add_argument("--port", type=int, default=9095)
+    pa.add_argument("--out", help="append received alerts as JSON lines")
+    pa.set_defaults(fn=cmd_alert_sink)
 
     a = p.parse_args(argv)
     a.fn(a)

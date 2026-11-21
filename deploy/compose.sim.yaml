@@ -1,0 +1,16 @@
+# Engine overlay: the CPU simulator (vLLM-compatible metrics, runtime fault injection on /sim/fault).
+services:
+  engine:
+    image: inferobs:local  # built by the proxy service
+    pull_policy: never
+    command:
+      - sim
+      - --port=8000
+      - --model=${SIM_MODEL:-sim-llm}
+      - --step-base-ms=${SIM_STEP_BASE_MS:-6.0}
+      - --step-per-seq-ms=${SIM_STEP_PER_SEQ_MS:-0.2}
+      - --prefill-per-token-us=${SIM_PREFILL_PER_TOKEN_US:-30}
+      - --max-num-seqs=${SIM_MAX_NUM_SEQS:-64}
+      - --kv-capacity-tokens=${SIM_KV_CAPACITY_TOKENS:-65536}
+    ports: ["${BIND:-127.0.0.1}:${ENGINE_PORT:-28001}:8000"]
+    restart: unless-stopped

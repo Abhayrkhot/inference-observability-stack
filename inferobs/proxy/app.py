@@ -282,12 +282,19 @@ class Proxy:
                 await resp.prepare(request)
                 parser = SSEParser()
                 client_gone = False
+                # TTFC and chunk gaps are observed as they happen, not when the request ends: a
+                # 30 s generation would otherwise report its TTFC 30 s late and delay alerts.
+                h_gap = m.tpoc.labels(*labels)
                 async for chunk in up.content.iter_any():
                     now = time.perf_counter()
                     for raw, data in parser.feed(chunk):
                         kind = meter.on_event(data, now)
-                        if kind is EventKind.CONTENT and meter.content_chunks == 1:
-                            span.add_event("gen_ai.first_chunk")
+                        if kind is EventKind.CONTENT:
+                            if meter.content_chunks == 1:
+                                span.add_event("gen_ai.first_chunk")
+                                m.ttfc.labels(*labels).observe(now - t0, exemplar=_exemplar(span))
+                            else:
+                                h_gap.observe(meter.gaps[-1])
                         if injected and kind is EventKind.USAGE_ONLY:
                             continue
                         try:
@@ -355,19 +362,13 @@ class Proxy:
         m = self.metrics
         t_end = time.perf_counter()
         duration = t_end - meter.t_start
-        sc = span.get_span_context()
-        ex = {"trace_id": format(sc.trace_id, "032x")} if sc.is_valid and sc.trace_flags.sampled else None
+        ex = _exemplar(span)
         m.duration.labels(*labels, error_type).observe(duration, exemplar=ex)
         ttfc = meter.ttfc
         tpot = meter.tpot()
         if not error_type:
-            if stream and ttfc is not None:
-                m.ttfc.labels(*labels).observe(ttfc, exemplar=ex)
-                h = m.tpoc.labels(*labels)
-                for g in meter.gaps:
-                    h.observe(g)
-                if tpot is not None:
-                    m.tpot.labels(*labels).observe(tpot, exemplar=ex)
+            if stream and tpot is not None:
+                m.tpot.labels(*labels).observe(tpot, exemplar=ex)
             if meter.prompt_tokens is not None:
                 m.tokens.labels(*labels, "input").observe(meter.prompt_tokens)
             m.tokens.labels(*labels, "output").observe(meter.output_tokens)
@@ -421,6 +422,11 @@ class Proxy:
             if self.cfg.access_log_gaps:
                 rec["gaps_us"] = [round(g * 1e6) for g in meter.gaps]
             self.access_log.write(rec)
+
+
+def _exemplar(span) -> dict | None:
+    sc = span.get_span_context()
+    return {"trace_id": format(sc.trace_id, "032x")} if sc.is_valid and sc.trace_flags.sampled else None
 
 
 def _dumps(obj) -> str:

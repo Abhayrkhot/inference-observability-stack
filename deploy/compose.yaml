@@ -1,0 +1,88 @@
+# Core stack: metering proxy, Prometheus (exemplar storage), Alertmanager, Tempo, Grafana.
+# Add exactly one engine overlay:
+#   docker compose -f deploy/compose.yaml -f deploy/compose.sim.yaml up -d --build     (CPU simulator)
+#   docker compose -f deploy/compose.yaml -f deploy/compose.vllm.yaml up -d --build    (vLLM on a GPU)
+# Optional: -f deploy/compose.faults.yaml puts toxiproxy between the proxy and the engine.
+# Ports bind to 127.0.0.1 unless BIND is set.
+name: inferobs
+
+services:
+  proxy:
+    image: inferobs:local
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command:
+      - proxy
+      - --upstream=${ENGINE_PROVIDER:-sim}=${ENGINE_URL:-http://engine:8000}
+      - --port=9000
+      - --access-log=/logs/access.jsonl
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      OTEL_SERVICE_NAME: inferobs-proxy
+      INFEROBS_BUCKETS: ${INFEROBS_BUCKETS:-fine}
+      INFEROBS_SAMPLE_RATIO: ${INFEROBS_SAMPLE_RATIO:-1.0}
+    ports: ["${BIND:-127.0.0.1}:${PROXY_PORT:-28000}:9000"]
+    volumes: [proxy-logs:/logs]
+    depends_on: [tempo]
+    restart: unless-stopped
+
+  alert-sink:
+    image: inferobs:local  # built by the proxy service
+    pull_policy: never
+    command: [alert-sink, --port=9095, --out=/logs/alerts.jsonl]
+    ports: ["${BIND:-127.0.0.1}:${ALERT_SINK_PORT:-28095}:9095"]
+    volumes: [proxy-logs:/logs]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --enable-feature=exemplar-storage
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prom-data:/prometheus
+    ports: ["${BIND:-127.0.0.1}:${PROMETHEUS_PORT:-28090}:9090"]
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: [--config.file=/etc/alertmanager/alertmanager.yml, --storage.path=/alertmanager]
+    volumes: [./alertmanager:/etc/alertmanager:ro]
+    ports: ["${BIND:-127.0.0.1}:${ALERTMANAGER_PORT:-28093}:9093"]
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: [-config.file=/etc/tempo/tempo.yaml]
+    volumes:
+      - ./tempo:/etc/tempo:ro
+      - tempo-data:/var/tempo
+    ports: ["${BIND:-127.0.0.1}:${TEMPO_PORT:-28200}:3200"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/llm-serving.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["${BIND:-127.0.0.1}:${GRAFANA_PORT:-28300}:3000"]
+    depends_on: [prometheus, tempo]
+    restart: unless-stopped
+
+volumes:
+  prom-data:
+  tempo-data:
+  proxy-logs:

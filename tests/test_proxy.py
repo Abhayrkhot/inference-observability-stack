@@ -63,6 +63,23 @@ async def test_streaming_is_forwarded_and_metered(sim):
         await server.close()
 
 
+async def test_ttfc_is_observed_when_the_first_chunk_arrives(sim):
+    """A long generation must not delay its TTFC observation until the stream ends."""
+    proxy, server = await start_proxy(sim.url)
+    try:
+        async with aiohttp.ClientSession() as s:
+            r = await s.post(f"{proxy.url}/v1/chat/completions", json=chat_body(stream=True, max_tokens=400))
+            await r.content.readany()
+            await asyncio.sleep(0.05)
+            assert sample(proxy, "gen_ai_client_operation_time_to_first_chunk_seconds_count") == 1
+            assert sample(proxy, "gen_ai_client_operation_duration_seconds_count", error_type="") == 0
+            await r.read()
+        assert sample(proxy, "gen_ai_client_operation_duration_seconds_count", error_type="") == 1
+        assert sample(proxy, "gen_ai_client_operation_time_per_output_chunk_seconds_count") == 399
+    finally:
+        await server.close()
+
+
 async def test_client_requested_usage_is_kept(sim):
     proxy, server = await start_proxy(sim.url)
     try:

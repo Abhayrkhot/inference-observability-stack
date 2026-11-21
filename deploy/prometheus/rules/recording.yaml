@@ -1,0 +1,48 @@
+# Recording rules used by the dashboard and the experiments. Level is provider/model; the
+# client-side series come from the proxy, the engine-side ones from vLLM (or the simulator).
+groups:
+  - name: inferobs-client
+    rules:
+      - record: provider_model:gen_ai_requests:rate1m
+        expr: sum by (gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_duration_seconds_count[1m]))
+      - record: provider_model:gen_ai_errors:ratio_rate1m
+        # "or ... * 0" keeps the ratio at 0 instead of empty when there are no failed requests.
+        expr: |
+          (
+            sum by (gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_duration_seconds_count{error_type!~"|cancelled"}[1m]))
+            or
+            sum by (gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_duration_seconds_count[1m])) * 0
+          )
+          /
+          sum by (gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_duration_seconds_count{error_type!="cancelled"}[1m]))
+      - record: provider_model:gen_ai_output_tokens:rate1m
+        expr: sum by (gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[1m]))
+      - record: provider_model:gen_ai_input_tokens:rate1m
+        expr: sum by (gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[1m]))
+      - record: provider_model:gen_ai_ttfc_seconds:p50_1m
+        expr: histogram_quantile(0.50, sum by (le, gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_time_to_first_chunk_seconds_bucket[1m])))
+      - record: provider_model:gen_ai_ttfc_seconds:p95_1m
+        expr: histogram_quantile(0.95, sum by (le, gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_time_to_first_chunk_seconds_bucket[1m])))
+      - record: provider_model:gen_ai_ttfc_seconds:p99_1m
+        expr: histogram_quantile(0.99, sum by (le, gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_time_to_first_chunk_seconds_bucket[1m])))
+      - record: provider_model:gen_ai_tpot_seconds:p50_1m
+        expr: histogram_quantile(0.50, sum by (le, gen_ai_provider_name, gen_ai_request_model) (rate(inferobs_time_per_output_token_seconds_bucket[1m])))
+      - record: provider_model:gen_ai_tpot_seconds:p99_1m
+        expr: histogram_quantile(0.99, sum by (le, gen_ai_provider_name, gen_ai_request_model) (rate(inferobs_time_per_output_token_seconds_bucket[1m])))
+      - record: provider_model:gen_ai_chunk_gap_seconds:p99_1m
+        expr: histogram_quantile(0.99, sum by (le, gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_time_per_output_chunk_seconds_bucket[1m])))
+      - record: provider_model:gen_ai_duration_seconds:p99_1m
+        expr: histogram_quantile(0.99, sum by (le, gen_ai_provider_name, gen_ai_request_model) (rate(gen_ai_client_operation_duration_seconds_bucket{error_type=""}[1m])))
+
+  - name: inferobs-engine
+    rules:
+      - record: model:vllm_ttft_seconds:p50_1m
+        expr: histogram_quantile(0.50, sum by (le, model_name) (rate(vllm:time_to_first_token_seconds_bucket[1m])))
+      - record: model:vllm_ttft_seconds:p99_1m
+        expr: histogram_quantile(0.99, sum by (le, model_name) (rate(vllm:time_to_first_token_seconds_bucket[1m])))
+      - record: model:vllm_itl_seconds:p99_1m
+        expr: histogram_quantile(0.99, sum by (le, model_name) (rate(vllm:inter_token_latency_seconds_bucket[1m])))
+      - record: model:vllm_queue_seconds:p99_1m
+        expr: histogram_quantile(0.99, sum by (le, model_name) (rate(vllm:request_queue_time_seconds_bucket[1m])))
+      - record: model:vllm_generation_tokens:rate1m
+        expr: sum by (model_name) (rate(vllm:generation_tokens_total[1m]))

@@ -56,7 +56,7 @@ class ProxyMetrics:
         )
         self.ttfc = Histogram(
             "gen_ai_client_operation_time_to_first_chunk_seconds",
-            "Request received at the proxy to first content-bearing chunk (streaming, success only).",
+            "Request received at the proxy to first content-bearing chunk, observed when it arrives.",
             BASE_LABELS,
             buckets=b["ttft"],
             registry=r,

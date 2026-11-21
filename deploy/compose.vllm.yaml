@@ -1,0 +1,48 @@
+# Engine overlay: vLLM 0.34 on one NVIDIA GPU, exporting request spans to Tempo over OTLP/gRPC.
+# Defaults fit a 4 GB laptop GPU (Qwen2.5-0.5B-Instruct, bf16).
+services:
+  engine:
+    image: vllm/vllm-openai:v0.34.0
+    command:
+      - ${VLLM_MODEL:-Qwen/Qwen2.5-0.5B-Instruct}
+      - --served-model-name=${VLLM_SERVED_NAME:-qwen2.5-0.5b-instruct}
+      - --port=8000
+      - --max-model-len=${VLLM_MAX_MODEL_LEN:-4096}
+      - --gpu-memory-utilization=${VLLM_GPU_UTIL:-0.80}
+      - --max-num-seqs=${VLLM_MAX_NUM_SEQS:-64}
+      - --generation-config=vllm
+      - --otlp-traces-endpoint=http://tempo:4317
+      # Do not pass --disable-log-stats: it also turns off the engine's Prometheus metrics.
+    environment:
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      OTEL_SERVICE_NAME: vllm
+      OTEL_EXPORTER_OTLP_TRACES_INSECURE: "true"
+    volumes:
+      - ${HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
+      - vllm-cache:/root/.cache/vllm
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports: ["${BIND:-127.0.0.1}:${ENGINE_PORT:-28001}:8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 300s
+    restart: unless-stopped
+
+  proxy:
+    command:
+      - proxy
+      - --upstream=vllm=${ENGINE_URL:-http://engine:8000}
+      - --port=9000
+      - --access-log=/logs/access.jsonl
+
+volumes:
+  vllm-cache:
