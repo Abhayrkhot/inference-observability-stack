@@ -12,8 +12,8 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -e '.[dev,analysis]'
@@ -30,7 +30,7 @@ jobs:
   promtool:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Config, rules and rule unit tests
         run: |
           P="docker run --rm -v $PWD/deploy:/d -w /d/prometheus --entrypoint promtool prom/prometheus:v3.5.0"
@@ -41,8 +41,8 @@ jobs:
   stack-smoke:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -e .
