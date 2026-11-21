@@ -189,7 +189,7 @@ What each fault did, before (the minute before injection) to during (from 30 s a
 | overload | 50.8 ms to 24,726.4 ms | 117.1 ms to 26,179.6 ms | 8.5 ms to 24.4 ms | 0.0% to 16.3% | 151.7 ms to 39,780.1 ms |
 | slow_decode | 51.8 ms to 170.2 ms | 126.3 ms to 840.4 ms | 8.5 ms to 21.6 ms | 0.0% to 0.0% | 198.6 ms to 1,164.4 ms |
 
-Caller columns are the proxy's histograms; vLLM's are its own. Source: `results/box-3050ti/fault_effects.csv`, commit `ffd2fe2-dirty`.
+Caller columns are the proxy's histograms; vLLM's are its own. Source: `results/box-3050ti/fault_effects.csv`, commit `60401a3`.
 <!-- END GENERATED: faults -->
 
 `slow_decode` runs a matrix-multiply loop on the same GPU. It slows every decode step, but per-request
