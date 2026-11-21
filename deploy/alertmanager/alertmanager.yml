@@ -1,6 +1,6 @@
 route:
   receiver: sink
-  group_by: [alertname, slo]
+  group_by: [alertname, slo, long_window]
   group_wait: 5s
   group_interval: 30s
   repeat_interval: 1h

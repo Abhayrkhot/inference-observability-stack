@@ -131,7 +131,7 @@ def block_headline() -> str:
         if cal:
             det = sorted(float(r["detect_s"]) for r in cal)
             out.append(
-                f"- **A 1.5 s network delay is caught by the caller-side TTFC SLO in "
+                f"- **A 3 s network delay is caught by the caller-side TTFC SLO in "
                 f"{det[len(det) // 2]:.0f} s (median); the engine's own TTFT never moves**"
                 f"{' (EngineTTFTHigh did not fire)' if not any(r['detected'] == 'True' for r in eng) else ''}."
             )
@@ -321,9 +321,11 @@ def block_faults() -> str:
             if x["alert"] not in alerts:
                 alerts.append(x["alert"])
         for a in alerts:
-            ys = [x for x in xs if x["alert"] == a]
+            ys = [x for x in xs if x["alert"] == a and x.get("already_firing") != "True"]
+            if not ys:
+                continue
             det = sorted(float(y["detect_s"]) for y in ys if y["detected"] == "True")
-            exp = ys[0]["expected"] == "True"
+            exp = {"fire": "fire", "silent": "stay silent"}.get(ys[0]["expected"], "")
             reps = len(ys)
             if det:
                 cell = f"{det[len(det) // 2]:.0f} s" + (
@@ -331,14 +333,14 @@ def block_faults() -> str:
                 )
             else:
                 cell = "not fired"
-            body.append([s, a, "yes" if exp else "", f"{len(det)}/{reps}", cell])
+            body.append([s, a, exp, f"{len(det)}/{reps}", cell])
     rec = [
         float(x["engine_recovery_s"]) for x in r if x["scenario"] == "engine_crash" and x["engine_recovery_s"]
     ]
     m = meta(GPU_TAG, "faults")
     note = f" vLLM took {min(rec):.0f} to {max(rec):.0f} s to serve again after a restart." if rec else ""
     return (
-        table(["fault", "alert", "expected", "fired", "detection (median, range)"], body)
+        table(["fault", "alert", "should", "fired", "detection (median, range)"], body)
         + f"\n\nDetection is the first Prometheus evaluation with the alert firing after injection, with the "
         f"compressed-window SLO rules (window_scale 1/12: the 1 h/5 m fast-burn page becomes 5 m/25 s) and "
         f"a background load of {m.get('rate', '?')} req/s.{note} " + src(GPU_TAG, "faults")

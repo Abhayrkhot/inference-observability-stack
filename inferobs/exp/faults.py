@@ -9,7 +9,7 @@ Prometheus' ALERTS series (first sample in state "firing" after injection) and f
 Scenarios:
   engine_crash    docker kill the engine container, restart it afterwards
   engine_hang     docker pause the engine (frozen process: connections open, nothing answers)
-  net_latency     +1.5 s on every byte from the engine (toxiproxy); the engine's own TTFT is unchanged
+  net_latency     +3 s on every byte from the engine (toxiproxy); the engine's own TTFT is unchanged
   stream_cut      toxiproxy closes engine connections after 4 KB: streams end mid-generation
   overload        an extra open-loop load of several times the background rate
   slow_decode     sim: slowdown x4; vLLM: a co-located GPU job contends for the GPU
@@ -42,27 +42,48 @@ from inferobs.exp.common import (
 TOXI = "http://127.0.0.1:28474"
 SINK = "http://127.0.0.1:28095"
 
-# Alerts each scenario is expected to raise; the run ends early once all have fired.
+# Alerts each scenario should raise (the run ends early once all have fired) and alerts that must stay
+# silent (negative controls: the engine's own view cannot see a network or stream fault).
 EXPECTED = {
     "engine_crash": [
         "SLOErrorBudgetBurnFast:availability",
         "InferenceUpstreamUnhealthy",
         "InferenceEngineScrapeDown",
     ],
-    "engine_hang": ["InferenceUpstreamUnhealthy", "InferenceEngineScrapeDown"],
+    "engine_hang": [
+        "InferenceUpstreamUnhealthy",
+        "InferenceEngineScrapeDown",
+        "SLOErrorBudgetBurnFast:availability",
+    ],
     "net_latency": ["SLOErrorBudgetBurnFast:ttfc", "CallerTTFCHigh"],
     "stream_cut": ["SLOErrorBudgetBurnFast:availability"],
     "overload": ["SLOErrorBudgetBurnFast:ttfc", "EngineQueueBacklog"],
     "slow_decode": ["SLOErrorBudgetBurnFast:tpot"],
 }
+SILENT = {
+    "net_latency": ["EngineTTFTHigh"],
+    "stream_cut": ["InferenceEngineScrapeDown", "EngineTTFTHigh"],
+}
+NET_LATENCY_MS = 3000  # above both the 1 s TTFC SLO threshold and the 2 s CallerTTFCHigh threshold
 
 
-def alert_key(labels: dict) -> str:
+def alert_key(labels: dict) -> str | None:
+    """Stable name for an alert, or None for alerts the experiment does not score.
+
+    Scored: symptom alerts and the two page tiers of the compressed-window SLO rules (long windows 5m
+    and 30m). Not scored: the production-window SLO alerts (they also see lab faults) and the ticket
+    tiers, whose 10 m / 30 m short windows stay elevated across consecutive scenarios.
+    """
     name = labels["alertname"]
-    if name.startswith("SLOErrorBudgetBurn"):
-        return f"{name}:{labels.get('slo')}" + (
-            "" if labels.get("long_window") in ("5m", "1h") else f"@{labels.get('long_window')}"
-        )
+    if name == "SLOErrorBudgetBurn":
+        return None
+    if name == "SLOErrorBudgetBurnFast":
+        lw = labels.get("long_window")
+        if lw == "5m":
+            return f"{name}:{labels.get('slo')}"
+        if lw == "30m":
+            return f"{name}:{labels.get('slo')}@30m"
+        return None
     return name
 
 
@@ -100,7 +121,7 @@ def inject(ctx: Ctx, scenario: str) -> None:
     elif scenario == "engine_hang":
         docker("pause", ctx.engine_container)
     elif scenario == "net_latency":
-        _toxic("lat", "latency", {"latency": 1500, "jitter": 0})
+        _toxic("lat", "latency", {"latency": NET_LATENCY_MS, "jitter": 0})
     elif scenario == "stream_cut":
         _toxic("cut", "limit_data", {"bytes": 4096})
     elif scenario == "overload":
@@ -175,6 +196,8 @@ def first_firing(prom: Prom, start: float, end: float) -> dict[str, float]:
     out: dict[str, float] = {}
     for series in prom.range('ALERTS{alertstate="firing"}', start, end, step=1.0):
         k = alert_key(series["metric"])
+        if k is None:
+            continue
         t = float(series["values"][0][0])
         out[k] = min(out.get(k, t), t)
     return out
@@ -189,19 +212,20 @@ def first_notified(start: float) -> dict[str, float]:
     for r in recs:
         if r["status"] == "firing" and r["received_unix"] >= start:
             k = alert_key(r["labels"])
-            out[k] = min(out.get(k, r["received_unix"]), r["received_unix"])
+            if k is not None:
+                out[k] = min(out.get(k, r["received_unix"]), r["received_unix"])
     return out
 
 
-def active_alerts(prom: Prom) -> list[str]:
-    return sorted({alert_key(r["metric"]) for r in prom.query("ALERTS")})
+def active_alerts(prom: Prom, t: float | None = None) -> list[str]:
+    """Scored alerts pending or firing at time t (now by default)."""
+    return sorted({k for r in prom.query("ALERTS", t) if (k := alert_key(r["metric"])) is not None})
 
 
-def wait_quiet(prom: Prom, max_s: float, ignore: tuple[str, ...] = ()) -> float:
+def wait_quiet(prom: Prom, max_s: float) -> float:
     t0 = time.time()
     while time.time() - t0 < max_s:
-        act = [a for a in active_alerts(prom) if not a.startswith(ignore)]
-        if not act:
+        if not active_alerts(prom):
             return time.time() - t0
         time.sleep(5)
     return time.time() - t0
@@ -248,6 +272,7 @@ def run(
             for scenario in scenarios:
                 quiet = wait_quiet(prom, cooldown_s * 2)
                 t0 = time.time()
+                already = set(active_alerts(prom, t0))
                 inject(ctx, scenario)
                 print(f"[{label}] rep {rep} {scenario}: injected", flush=True)
                 expected = EXPECTED[scenario]
@@ -255,21 +280,23 @@ def run(
                 while time.time() - t0 < max_fault_s:
                     time.sleep(2)
                     fired = first_firing(prom, t0, time.time())
-                    if all(e in fired for e in expected):
+                    if all(e in fired or e in already for e in expected):
                         break
                 t_fault_end = time.time()
                 recovery_s = revert(ctx, scenario)
                 t_rev = time.time()
                 time.sleep(cooldown_s)
-                fired = first_firing(prom, t0, t_fault_end + 5)
+                fired = {k: v for k, v in first_firing(prom, t0, t_fault_end + 5).items() if k not in already}
                 notified = first_notified(t0)
-                for key in sorted(set(fired) | set(expected)):
+                silent = SILENT.get(scenario, [])
+                for key in sorted(set(fired) | set(expected) | set(silent) | already):
                     rows.append(
                         {
                             "scenario": scenario,
                             "repeat": rep,
                             "alert": key,
-                            "expected": key in expected,
+                            "expected": "fire" if key in expected else ("silent" if key in silent else ""),
+                            "already_firing": key in already,
                             "detected": key in fired,
                             "detect_s": round(fired[key] - t0, 1) if key in fired else None,
                             "notified_s": round(notified[key] - t0, 1) if key in notified else None,
