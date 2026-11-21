@@ -31,7 +31,7 @@ from inferobs.exp.common import (
     write_meta,
 )
 from inferobs.proxy import metrics as pm
-from inferobs.sim.server import VLLM_ITL, VLLM_LATENCY, VLLM_TTFT
+from inferobs.vllm_buckets import VLLM_ITL, VLLM_LATENCY, VLLM_TTFT
 
 QS = (0.5, 0.9, 0.99)
 

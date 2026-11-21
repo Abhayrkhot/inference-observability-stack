@@ -12,11 +12,13 @@ import argparse
 import csv
 import json
 import re
+import statistics
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
+sys.path.insert(0, str(ROOT))
 GPU_TAG = "box-3050ti"
 
 
@@ -38,6 +40,18 @@ def f(v, scale=1.0, digits=1, unit="") -> str:
         return "n/a"
     x = float(v) * scale
     return f"{x:,.{digits}f}{unit}"
+
+
+def bucket_of(v: float) -> str:
+    """vLLM 0.34's inter-token bucket that contains v, e.g. "10 to 25 ms"."""
+    from inferobs.vllm_buckets import VLLM_ITL
+
+    lo = 0.0
+    for b in VLLM_ITL:
+        if v <= b:
+            return f"{lo * 1e3:g} to {b * 1e3:g} ms"
+        lo = b
+    return f"above {lo * 1e3:g} ms"
 
 
 def ms(v, digits=1) -> str:
@@ -70,11 +84,10 @@ def src(tag: str, name: str) -> str:
 
 # ---------------------------------------------------------------- blocks
 def block_setup() -> str:
-    m = meta(GPU_TAG, "overhead") or meta(GPU_TAG, "agreement")
     gpu = "NVIDIA GeForce RTX 3050 Ti Laptop GPU (4 GB)"
     return (
         f"Measured on one {gpu}, vLLM 0.34.0 serving Qwen2.5-0.5B-Instruct (bf16), on a shared "
-        f"20-thread i7-12700H laptop ({m.get('cpus', 20)} CPUs visible). Prometheus scrapes every 5 s. "
+        "20-thread i7-12700H laptop. Prometheus scrapes every 5 s. "
         "Workload: lognormal prompts (mean 256 words) and outputs (mean 128 tokens, `ignore_eos`)."
     )
 
@@ -127,8 +140,8 @@ def block_headline() -> str:
     if vb and fb:
         out.append(
             f"- **vLLM's default buckets misreport TPOT p99 by {pct(vb['rel_error'], 0)}** on this GPU "
-            f"(true value {ms(vb['exact_s'])}, below the lowest 10 ms bound); the proxy's layout is off by "
-            f"{pct(fb['rel_error'])}."
+            f"(true value {ms(vb['exact_s'])}, inside its {bucket_of(float(vb['exact_s']))} bucket, so "
+            f"PromQL interpolates across a wide range); the proxy's layout is off by {pct(fb['rel_error'])}."
         )
     if fl:
         lat = [r for r in fl if r["scenario"] == "net_latency"]
@@ -138,7 +151,7 @@ def block_headline() -> str:
             det = sorted(float(r["detect_s"]) for r in cal)
             out.append(
                 f"- **A 3 s network delay is caught by the caller-side TTFC SLO in "
-                f"{det[len(det) // 2]:.0f} s (median); the engine's own TTFT never moves**"
+                f"{statistics.median(det):.0f} s (median); the engine's own TTFT never moves**"
                 f"{' (EngineTTFTHigh did not fire)' if not any(r['detected'] == 'True' for r in eng) else ''}."
             )
     if sat:
@@ -348,7 +361,7 @@ def block_faults() -> str:
             exp = {"fire": "fire", "silent": "stay silent"}.get(ys[0]["expected"], "")
             reps = len(ys)
             if det:
-                cell = f"{det[len(det) // 2]:.0f} s" + (
+                cell = f"{statistics.median(det):.0f} s" + (
                     f" ({det[0]:.0f} to {det[-1]:.0f})" if len(det) > 1 else ""
                 )
             else:

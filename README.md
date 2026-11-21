@@ -5,7 +5,7 @@ SLO burn-rate alerting, distributed traces that cross into vLLM, and experiments
 the numbers on the dashboard are the numbers callers actually got.
 
 <!-- BEGIN GENERATED: setup -->
-Measured on one NVIDIA GeForce RTX 3050 Ti Laptop GPU (4 GB), vLLM 0.34.0 serving Qwen2.5-0.5B-Instruct (bf16), on a shared 20-thread i7-12700H laptop (20 CPUs visible). Prometheus scrapes every 5 s. Workload: lognormal prompts (mean 256 words) and outputs (mean 128 tokens, `ignore_eos`).
+Measured on one NVIDIA GeForce RTX 3050 Ti Laptop GPU (4 GB), vLLM 0.34.0 serving Qwen2.5-0.5B-Instruct (bf16), on a shared 20-thread i7-12700H laptop. Prometheus scrapes every 5 s. Workload: lognormal prompts (mean 256 words) and outputs (mean 128 tokens, `ignore_eos`).
 <!-- END GENERATED: setup -->
 
 ## Results
@@ -13,8 +13,8 @@ Measured on one NVIDIA GeForce RTX 3050 Ti Laptop GPU (4 GB), vLLM 0.34.0 servin
 <!-- BEGIN GENERATED: headline -->
 - **The proxy's latency cost is below what 629 paired requests can resolve:** at 32 streams TTFT changes by +1.7 ms at p50 (95% CI -1.79 to 5.71 ms) and -3.5 ms at p99 (-19.25 to 12.47 ms). It costs 149 us of CPU per streamed token with every request traced.
 - **The dashboard's TTFT p99 is within 4.8% of the exact value** computed from every request in the access log.
-- **vLLM's default buckets misreport TPOT p99 by +92%** on this GPU (true value 12.8 ms, below the lowest 10 ms bound); the proxy's layout is off by +2.9%.
-- **A 3 s network delay is caught by the caller-side TTFC SLO in 62 s (median); the engine's own TTFT never moves** (EngineTTFTHigh did not fire).
+- **vLLM's default buckets misreport TPOT p99 by +92%** on this GPU (true value 12.8 ms, inside its 10 to 25 ms bucket, so PromQL interpolates across a wide range); the proxy's layout is off by +2.9%.
+- **A 3 s network delay is caught by the caller-side TTFC SLO in 60 s (median); the engine's own TTFT never moves** (EngineTTFTHigh did not fire).
 - **Capacity at SLO: 14.8 req/s** (1,820 output tok/s) before TTFT p99 passes 1 s or TPOT p99 passes 50 ms.
 <!-- END GENERATED: headline -->
 
@@ -157,19 +157,19 @@ caller's TTFC take off together in the last stage.*
 | fault | alert | should | fired | detection (median, range) |
 |---|---|---|---|---|
 | engine_crash | InferenceEngineScrapeDown | fire | 2/2 | 36 s (35 to 36) |
-| engine_crash | InferenceUpstreamUnhealthy | fire | 2/2 | 40 s (36 to 40) |
-| engine_crash | SLOErrorBudgetBurnFast:availability | fire | 2/2 | 37 s (36 to 37) |
+| engine_crash | InferenceUpstreamUnhealthy | fire | 2/2 | 38 s (36 to 40) |
+| engine_crash | SLOErrorBudgetBurnFast:availability | fire | 2/2 | 36 s (36 to 37) |
 | engine_hang | InferenceEngineScrapeDown | fire | 2/2 | 40 s (40 to 40) |
-| engine_hang | InferenceUpstreamUnhealthy | fire | 2/2 | 45 s (40 to 45) |
+| engine_hang | InferenceUpstreamUnhealthy | fire | 2/2 | 42 s (40 to 45) |
 | engine_hang | SLOErrorBudgetBurnFast:availability | fire | 2/2 | 91 s (91 to 91) |
 | net_latency | CallerTTFCHigh | fire | 2/2 | 75 s (75 to 75) |
 | net_latency | EngineTTFTHigh | stay silent | 0/2 | not fired |
-| net_latency | SLOErrorBudgetBurnFast:ttfc | fire | 2/2 | 62 s (57 to 62) |
+| net_latency | SLOErrorBudgetBurnFast:ttfc | fire | 2/2 | 60 s (57 to 62) |
 | stream_cut | EngineTTFTHigh | stay silent | 0/2 | not fired |
 | stream_cut | InferenceEngineScrapeDown | stay silent | 0/2 | not fired |
-| stream_cut | SLOErrorBudgetBurnFast:availability | fire | 2/2 | 37 s (18 to 37) |
+| stream_cut | SLOErrorBudgetBurnFast:availability | fire | 2/2 | 28 s (18 to 37) |
 | overload | CallerTTFCHigh |  | 2/2 | 76 s (76 to 76) |
-| overload | EngineQueueBacklog | fire | 2/2 | 76 s (71 to 76) |
+| overload | EngineQueueBacklog | fire | 2/2 | 74 s (71 to 76) |
 | overload | EngineTTFTHigh |  | 2/2 | 66 s (66 to 66) |
 | overload | SLOErrorBudgetBurnFast:availability |  | 1/1 | 59 s |
 | overload | SLOErrorBudgetBurnFast:ttfc | fire | 2/2 | 38 s (38 to 38) |
