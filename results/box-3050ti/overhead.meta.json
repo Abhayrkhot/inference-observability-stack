@@ -1,8 +1,8 @@
 {
   "host": "llm-server",
   "cpus": 20,
-  "loadavg_end": 10.13,
-  "finished_unix": 1795298027.2,
+  "loadavg_end": 10.35,
+  "finished_unix": 1795298090.4,
   "python": "3.12.16",
   "method": "interleaved: requests rotate direct, proxy, proxy+tracing within each run",
   "settle_s": 10.0,
@@ -18,6 +18,6 @@
   "prompt": "lognormal:256:0.6:16:1024",
   "output": "lognormal:128:0.6:8:512",
   "measured_at_git_sha": "49adce6",
-  "reanalyzed_at_git_sha": "49adce6-dirty",
+  "reanalyzed_at_git_sha": "450779f",
   "git_sha": "49adce6"
 }
